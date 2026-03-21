@@ -13,7 +13,7 @@
 ## What's Inside
 
 ### Distribution (3 skills)
-- **late-social-media** -- Post to 13+ platforms (Twitter, LinkedIn, Instagram, YouTube, TikTok, Threads, and more)
+- **late-social-media** -- Post to 13+ platforms via Zernio (Twitter, LinkedIn, Instagram, YouTube, TikTok, Threads, and more)
 - **short-form-posting** -- Optimized for Shorts, Reels, and TikTok with unique captions per platform
 - **youtube-content-package** -- Complete YouTube packages (title, description, tags, timestamps, thumbnail)
 
@@ -72,7 +72,7 @@ pip install -r clip_extractor/requirements.txt
 Create a `.env` file or set environment variables:
 
 ```bash
-export LATE_API_KEY="your-late-api-key"      # Required: getlate.dev
+export ZERNIO_API_KEY="your-zernio-api-key"  # Required: zernio.com (free to start)
 export KIE_API_KEY="your-kie-api-key"        # Optional: kie.ai (for thumbnails/carousels)
 ```
 
@@ -110,7 +110,7 @@ See `examples/` for more detailed walkthroughs.
 - **Node.js 18+** (for Remotion video engine)
 - **Python 3.10+** (for clip extractor)
 - **FFmpeg** (for video processing)
-- **Late API key** ([getlate.dev](https://getlate.dev?atp=enriquemarq)) for social media posting
+- **Zernio API key** ([zernio.com](https://zernio.com) -- free to start) for social media posting
 - **KIE API key** ([kie.ai](https://kie.ai)) for AI image generation (optional)
 
 ---

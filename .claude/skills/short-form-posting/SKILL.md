@@ -3,6 +3,8 @@ name: short-form-posting
 description: Posts short-form video (Shorts/Reels/TikTok) with platform-specific content packages. Transcribes video, creates tailored titles/descriptions/hashtags per platform, handles thumbnails, and publishes via Late API. Triggers on "post short", "post reel", "post shorts", "upload short", "short-form", "reels", "post to youtube instagram tiktok".
 argument-hint: [video_file_path]
 dependencies:
+  - extracting-transcripts (for transcript extraction)
+  - video-upload-helper (for compression + upload)
   - late-social-media (for account IDs, retry logic, API reference)
 allowed-tools:
   - mcp__late__*
@@ -20,8 +22,8 @@ Post short-form video content (YouTube Shorts, Instagram Reels, TikTok) with uni
 ## Workflow Overview
 
 ```
-1. Transcribe video (WhisperX or any transcription tool)
-2. Confirm profile/accounts to post from
+1. Transcribe video (WhisperX)
+2. Confirm profile (Enrique or Trejon)
 3. Create platform-specific content package
 4. Show package to user for approval
 5. Upload video to Late storage
@@ -33,19 +35,16 @@ Post short-form video content (YouTube Shorts, Instagram Reels, TikTok) with uni
 
 ## Step 1: Transcribe the Video
 
-Use WhisperX, faster-whisper, or any local transcription tool:
+Use WhisperX (preferred) via the extracting-transcripts skill:
 
 ```bash
-# Example with WhisperX (adjust path to your script)
-python transcribe_whisperx.py "VIDEO_PATH"
+py -3.11 "C:\Users\enriq\Downloads\transcribe_whisperx.py" "VIDEO_PATH"
 ```
-
-> If you don't have a transcription tool set up, you can use the Late MCP's YouTube transcript tool after uploading, or manually provide a transcript.
 
 Read the transcript output to understand:
 - **Core message:** What problem does the video solve?
 - **Key points:** What are the 2-4 main takeaways?
-- **CTA mentioned:** What does the speaker tell viewers to do?
+- **CTA mentioned:** What does the speaker tell viewers to do? (link in bio, free trial, etc.)
 - **Hook:** What's the opening line/stat that grabs attention?
 
 This transcript drives ALL content creation. Do not write generic descriptions.
@@ -54,17 +53,23 @@ This transcript drives ALL content creation. Do not write generic descriptions.
 
 ## Step 2: Confirm Profile
 
-Ask the user which accounts to post from. Reference the `late-social-media` skill for current account IDs.
+Ask the user which profile to use. Reference the `late-social-media` skill for current account IDs.
 
+**Enrique Marq accounts:**
 | Platform | Username | Account ID |
 |----------|----------|------------|
-| YouTube | YOUR_USERNAME | YOUR_YOUTUBE_ACCOUNT_ID |
-| Instagram | YOUR_USERNAME | YOUR_INSTAGRAM_ACCOUNT_ID |
-| TikTok | YOUR_USERNAME | YOUR_TIKTOK_ACCOUNT_ID |
+| YouTube | enriquemarq-0 | `6978050f77637c5c857c82e9` |
+| Instagram | kikefuturo_ | `697bb56593a320156c4221b8` |
+| TikTok | kikemarqx | `697bb57b93a320156c4221b9` |
 
-> Run `mcp__late__accounts_list` to see your connected accounts.
+**Trejon Edmonds accounts:**
+| Platform | Username | Account ID |
+|----------|----------|------------|
+| YouTube | trejonedmonds | `697bd98d93a320156c4224e9` |
+| Instagram | trejonedmonds | `697bda2d93a320156c4224f4` |
+| TikTok | trejon_edmonds | `697bda2093a320156c4224f3` |
 
-**Always verify accounts before posting.**
+**Always verify with `mcp__late__accounts_list` before posting.**
 
 ---
 
@@ -89,22 +94,25 @@ Ask the user which accounts to post from. Reference the `late-social-media` skil
 
 [2-3 sentences expanding on the value/solution. Reference specific points from the transcript.]
 
-[CTA — use the exact CTA mentioned in the video]
+[CTA — use the exact CTA mentioned in the video, e.g., "Link in bio to try the IX system free"]
 
 My Links:
-Subscribe: YOUR_YOUTUBE_URL
-LinkedIn: YOUR_LINKEDIN_URL
-Instagram: YOUR_INSTAGRAM_URL
+Subscribe: https://www.youtube.com/@enriquemarq-0
+LinkedIn: https://www.linkedin.com/in/enrique-marq-756191319/
+Instagram: https://www.instagram.com/kikefuturo_/
 
 #Hashtag1 #Hashtag2 #Hashtag3
 ```
 
 **Tags:** Array of 10-15 researched keywords
-- Primary (5-7): High-volume, directly relevant
+- Primary (5-7): High-volume, directly relevant to the video topic
 - Secondary (3-5): Related topics, medium volume
-- Long-tail (2-3): Specific phrases
+- Long-tail (2-3): Specific phrases people search for
 
 **firstComment:** Engagement question directly related to the video topic
+```
+"What's the #1 thing killing your [topic] results? Drop it below."
+```
 
 **categoryId:** Match to content
 - `"28"` Science & Technology
@@ -120,6 +128,7 @@ Instagram: YOUR_INSTAGRAM_URL
 - **1-3 sentences maximum** (hook + value + CTA)
 - **1 call to action** (link in bio / follow / save)
 - **~3 hashtags only** (targeted, not generic)
+- The caption should be readable in 2 seconds
 
 **Format:**
 ```
@@ -135,7 +144,11 @@ Instagram: YOUR_INSTAGRAM_URL
 "Save this and share it with someone who needs to hear it."
 ```
 
-**IMPORTANT:** Instagram caption must be DIFFERENT wording from YouTube.
+**Thumbnail options:**
+- `thumbOffset`: Milliseconds from video start (ask user which moment looks best)
+- `instagramThumbnail`: Custom cover image URL (upload via presign if user provides one)
+
+**IMPORTANT:** Instagram caption must be DIFFERENT wording from YouTube. Same message, different angle.
 
 ---
 
@@ -145,6 +158,7 @@ Instagram: YOUR_INSTAGRAM_URL
 - **1-2 sentences max**
 - **1 CTA** (link in bio / follow for more)
 - **3-5 hashtags** (targeted)
+- TikTok users scroll fast — every word must earn its place
 
 **Format:**
 ```
@@ -184,7 +198,7 @@ Instagram: YOUR_INSTAGRAM_URL
 
 ## Step 4: Show Content Package to User
 
-Present all 3 platforms clearly:
+Present all 3 platforms clearly. Use this format:
 
 ```
 --- YOUTUBE SHORTS ---
@@ -231,13 +245,13 @@ Cover frame: [suggested timestamp in ms]
 ```
 
 - Under 500MB: Upload directly
-- Over 500MB: Compress first (HandBrake recommended)
+- Over 500MB: Use `video-upload-helper` skill to compress first
 
 ### Upload to Late storage
 ```bash
 # Get presigned URL
 curl -s -X POST "https://getlate.dev/api/v1/media/presign" \
-  -H "Authorization: Bearer YOUR_LATE_API_KEY" \
+  -H "Authorization: Bearer $LATE_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"filename": "video.mp4", "contentType": "video/mp4"}'
 
@@ -248,6 +262,14 @@ curl -X PUT "$UPLOAD_URL" \
   --progress-bar
 ```
 
+### Upload thumbnail (if custom cover image provided)
+```bash
+curl -s -X POST "https://getlate.dev/api/v1/media/presign" \
+  -H "Authorization: Bearer $LATE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"filename": "thumbnail.jpg", "contentType": "image/jpeg"}'
+```
+
 ---
 
 ## Step 6: Post via REST API
@@ -256,7 +278,7 @@ Use a single multi-platform request with `customContent` per platform:
 
 ```bash
 curl -s -X POST "https://getlate.dev/api/v1/posts" \
-  -H "Authorization: Bearer YOUR_LATE_API_KEY" \
+  -H "Authorization: Bearer $LATE_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
     "content": "[FALLBACK_CONTENT]",
@@ -268,7 +290,7 @@ curl -s -X POST "https://getlate.dev/api/v1/posts" \
     "platforms": [
       {
         "platform": "youtube",
-        "accountId": "YOUR_YOUTUBE_ACCOUNT_ID",
+        "accountId": "[YT_ACCOUNT_ID]",
         "customContent": "[YOUTUBE_DESCRIPTION]",
         "platformSpecificData": {
           "title": "[SELECTED_TITLE]",
@@ -280,7 +302,7 @@ curl -s -X POST "https://getlate.dev/api/v1/posts" \
       },
       {
         "platform": "instagram",
-        "accountId": "YOUR_INSTAGRAM_ACCOUNT_ID",
+        "accountId": "[IG_ACCOUNT_ID]",
         "customContent": "[IG_CAPTION]",
         "platformSpecificData": {
           "shareToFeed": true,
@@ -290,7 +312,7 @@ curl -s -X POST "https://getlate.dev/api/v1/posts" \
       },
       {
         "platform": "tiktok",
-        "accountId": "YOUR_TIKTOK_ACCOUNT_ID",
+        "accountId": "[TT_ACCOUNT_ID]",
         "customContent": "[TIKTOK_CAPTION]",
         "platformSpecificData": {
           "privacy_level": "PUBLIC_TO_EVERYONE",
@@ -307,6 +329,12 @@ curl -s -X POST "https://getlate.dev/api/v1/posts" \
   }'
 ```
 
+**Reading the API key at runtime:**
+```bash
+# Extract from Claude Code config
+LATE_API_KEY=$(python -c "import json; print(json.load(open('C:/Users/enriq/.claude.json'))['mcpServers']['late']['env']['LATE_API_KEY'])")
+```
+
 ---
 
 ## Step 7: Verify Posts
@@ -317,7 +345,7 @@ After posting, verify each platform succeeded:
 mcp__late__posts_list(status=published, limit=5)
 ```
 
-**Check that you see entries for all 3 platforms.** If any are missing:
+**Check that you see entries for all 3 platforms.** If any are missing, follow the retry protocol from `late-social-media` skill:
 
 1. Check `posts_list` — maybe it posted despite timeout
 2. Only retry if confirmed NOT published
@@ -328,3 +356,86 @@ Report to user:
 - Post IDs for each platform
 - Platform URLs (from `platformPostUrl` in response)
 - Any failures
+
+---
+
+## Example: Complete Package
+
+*Based on a video about cold outreach with the hook "99% of your cold messages never get a response"*
+
+### YouTube Shorts
+```
+Title: 99% of Your Cold Messages Get Ignored — Here's Why
+
+Description:
+Most cold outreach fails because of 3 missing pieces: infrastructure, personalization, and reply speed.
+
+Companies fixing all three are booking 20-30 meetings per week with multi-channel campaigns that get 3x more replies.
+
+Try the IX system free — link in bio.
+
+My Links:
+Subscribe: https://www.youtube.com/@enriquemarq-0
+LinkedIn: https://www.linkedin.com/in/enrique-marq-756191319/
+Instagram: https://www.instagram.com/kikefuturo_/
+
+#ColdOutreach #B2BSales #AIAgents
+
+Tags: ["cold outreach", "outreach strategy", "AI sales agents", "multi-channel outreach",
+"B2B lead generation", "cold email tips", "sales automation", "booking meetings",
+"outbound sales", "SDR tips", "AI outreach", "email deliverability"]
+
+firstComment: What's the #1 thing killing your outreach results? Drop it below.
+categoryId: "28"
+```
+
+### Instagram Reels
+```
+Caption:
+Your cold messages are getting ignored because you're missing 3 things. Fix them and book 20-30 meetings a week. Link in bio.
+
+#coldoutreach #b2bsales #aisales
+
+firstComment: Save this and share it with someone who needs to hear it.
+thumbOffset: 3000
+```
+
+### TikTok
+```
+Caption:
+99% of cold messages fail. Here's the 3 things you're missing. Link in bio to try it free.
+
+#coldoutreach #salestips #aiagents #b2b #outreach
+
+video_cover_timestamp_ms: 3000
+```
+
+---
+
+## Social Links (Enrique)
+
+```
+YouTube: https://www.youtube.com/@enriquemarq-0
+LinkedIn: https://www.linkedin.com/in/enrique-marq-756191319/
+Instagram: https://www.instagram.com/kikefuturo_/
+TikTok: https://www.tiktok.com/@kikemarqx
+```
+
+## Social Links (Trejon)
+
+```
+YouTube: https://www.youtube.com/@trejonedmonds
+LinkedIn: https://www.linkedin.com/in/trejon-edmonds-63a201289/
+Instagram: https://www.instagram.com/trejonedmonds
+TikTok: https://www.tiktok.com/@trejon_edmonds
+Twitter/X: https://x.com/Trejon_
+```
+
+## Lead Magnet (current)
+```
+https://infinitxai.com/free/dfy-campaign-builder
+```
+
+## Branding
+- **Enrique brand color:** Orange `#F97316`
+- **IX System:** Mint green `#4ADE80` on black `#000000`

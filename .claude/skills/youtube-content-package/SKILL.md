@@ -1,8 +1,6 @@
 ---
 name: youtube-content-package
 description: Creates complete YouTube video packages including title, description, keywords, timestamps, thumbnail concepts, and posting via Late MCP. Use when user wants to publish a video, create YouTube content, or needs help with video SEO.
-dependencies:
-  - late-social-media (for account IDs and API reference)
 ---
 
 # YouTube Content Package
@@ -12,13 +10,14 @@ Create complete YouTube video packages with optimized titles, descriptions, keyw
 ## Full Workflow Overview
 
 1. **Check video size** - Must be under 500MB
-2. **Compress if needed** - Local HandBrake or FFmpeg
+2. **Compress if needed** - Local HandBrake with GPU
 3. **Upload to Late storage** - Get video URL
-4. **Extract transcript** - Local transcription tool
+4. **Extract transcript** - Local faster-whisper with GPU
 5. **Create content package** - Title, description, tags, etc.
 6. **ASK USER FOR THUMBNAIL** - REQUIRED before posting
 7. **Get user approval** - Confirm content package
 8. **Post via Late API** - Publish to YouTube with all fields
+9. **Log to database** - Track for analytics
 
 ---
 
@@ -39,15 +38,22 @@ Create complete YouTube video packages with optimized titles, descriptions, keyw
 (Get-Item "VIDEO_PATH").Length / 1MB
 ```
 
-**If over 500MB, compress locally with HandBrake (if installed):**
+**If over 500MB, compress locally:**
 
 ```bash
-HandBrakeCLI -i "INPUT_PATH" -o "OUTPUT_PATH" -e nvenc_h264 -q 28 -B 128 --encoder-preset medium -O
+"C:\Users\enriq\AppData\Local\Microsoft\WinGet\Packages\HandBrake.HandBrake.CLI_Microsoft.Winget.Source_8wekyb3d8bbwe\HandBrakeCLI.exe" \
+  -i "INPUT_PATH" \
+  -o "OUTPUT_PATH" \
+  -e nvenc_h264 \
+  -q 28 \
+  -B 128 \
+  --encoder-preset medium \
+  -O
 ```
 
-Or with FFmpeg:
-```bash
-ffmpeg -i "INPUT_PATH" -c:v h264_nvenc -cq 28 -c:a aac -b:a 128k "OUTPUT_PATH"
+Use higher -q values (24-28) to get under 500MB. Monitor progress:
+```powershell
+Get-Content "OUTPUT_PATH" -Tail 1
 ```
 
 ### Upload to Late Storage
@@ -55,7 +61,7 @@ ffmpeg -i "INPUT_PATH" -c:v h264_nvenc -cq 28 -c:a aac -b:a 128k "OUTPUT_PATH"
 Get presigned URL:
 ```bash
 curl -s -X POST "https://getlate.dev/api/v1/media/presign" \
-  -H "Authorization: Bearer YOUR_LATE_API_KEY" \
+  -H "Authorization: Bearer sk_7e0b73779f132c45094e7c87841bf8582ad3fd0b6204c92b977ffc6303a7d724" \
   -H "Content-Type: application/json" \
   -d '{"filename": "video-name.mp4", "contentType": "video/mp4"}'
 ```
@@ -64,7 +70,7 @@ Upload file:
 ```bash
 curl -X PUT "$UPLOAD_URL" \
   -H "Content-Type: video/mp4" \
-  --upload-file "VIDEO_PATH" \
+  --upload-file "COMPRESSED_VIDEO_PATH" \
   --progress-bar
 ```
 
@@ -72,14 +78,17 @@ curl -X PUT "$UPLOAD_URL" \
 
 ## Step 1: Extract Transcript with Timestamps
 
-Use any local transcription tool (WhisperX, faster-whisper, etc.):
+Use local faster-whisper with GPU (~10x faster than cloud):
 
 ```bash
-# Example - adjust to your setup
-python transcribe.py "VIDEO_PATH"
+py -3.11 "C:\Users\enriq\Downloads\transcribe.py" "VIDEO_PATH"
 ```
 
 **Output:** Creates `.txt` (full transcript) and `.srt` (timestamps) in same directory.
+
+**Processing time:** ~2 minutes for 30-minute video with GPU.
+
+See `extracting-transcripts` skill for details and troubleshooting
 
 ---
 
@@ -102,18 +111,24 @@ Based on transcript, create 5 title options following these patterns:
 
 ## Step 3: Research Tags
 
-Tags should be **simple, short, and psychologically aligned** with how real people search.
+Tags should be **simple, short, and psychologically aligned** with how real people search and how AI agents categorize content.
+
+### Tag Philosophy
+
+1. **Think like the searcher.** What would someone literally type into YouTube? Not full sentences. Short, simple words and phrases. "AI sales" not "AI powered sales campaign automation system."
+2. **SEO layer.** Cover the core topic, the tools/methods, and the outcome. YouTube matches tags to search queries. Simple tags cast a wider net.
+3. **AI agent layer.** AI systems (Google Discover, YouTube recommendations, ChatGPT search, Perplexity) categorize content semantically. Use clean, unambiguous terms that make it easy for agents to understand what the video is about and who it is for.
 
 ### Tag Structure
 
 **Core topic tags (3-5):** The simplest words describing what the video IS about.
-- One or two words max.
+- One or two words max. The obvious stuff.
 - Example: "AI sales", "sales campaign", "AI marketing"
 
 **Outcome tags (2-3):** What the viewer GETS from watching.
 - Example: "get clients", "book appointments", "client acquisition"
 
-**Identity tags (2-3):** WHO is this for.
+**Identity tags (2-3):** WHO is this for. How the target audience describes themselves.
 - Example: "agency owner", "lead generation", "marketing agency"
 
 **Tool/method tags (2-3):** Specific tools, systems, or methods shown.
@@ -123,17 +138,21 @@ Tags should be **simple, short, and psychologically aligned** with how real peop
 - Example: "AI tools", "business growth", "sales system"
 
 ### Tag Rules
-- Keep tags simple: 1-3 words each
+- **HARD LIMIT: Each tag must be under 28 characters** — YouTube API rejects tags at or near 30 chars. Stay safely under.
+- Keep tags simple: 1-3 words each (4 words ONLY if total stays under 28 chars)
 - No filler words ("how to use", "best way to")
 - No duplicating the title verbatim as a tag
-- Prioritize words people actually type
+- Prioritize words people actually type, not marketing jargon
 - Total of all tags combined must be under 500 characters
+- **Before posting, validate every tag:** `tag.length < 28` — if ANY tag fails, shorten it
 
 ### Late API Format
 Tags are a **string array** in the Late API:
 ```json
-["AI sales", "sales campaign", "AI agent", "get clients", "agency owner"]
+["AI sales", "sales campaign", "AI agent", "get clients", "agency owner", "sales automation"]
 ```
+
+**Pre-flight check before posting:** Loop through all tags and verify each is under 28 characters. YouTube API will reject the entire post with `invalidTags` error if any single tag is too long.
 
 ---
 
@@ -151,13 +170,14 @@ Tags are a **string array** in the Late API:
    - Simple, digestible language
    - What they'll learn/see
    - Why it matters to them
+   - No em-dashes, keep punctuation simple
 
 3. **Social Links**
    ```
    My Links:
-   Subscribe: YOUR_YOUTUBE_URL
-   LinkedIn: YOUR_LINKEDIN_URL
-   Instagram: YOUR_INSTAGRAM_URL
+   Subscribe: https://www.youtube.com/@enriquemarq-0
+   LinkedIn: https://www.linkedin.com/in/enrique-marq-756191319/
+   Instagram: https://www.instagram.com/kikefuturo_/
    ```
 
 4. **Timestamps** (consolidated into 10-15 key sections)
@@ -191,20 +211,29 @@ Same CTA as description intro, formatted for engagement:
 
 **This step is MANDATORY before posting.**
 
-Ask the user:
+**Use the `thumbnail-creator` skill** for generating thumbnails. It handles:
+- Two-pass face alignment via KIE API (text_to_image → image_to_image face swap)
+- 16:9 4K output, one at a time
+- See `.claude/skills/thumbnail-creator/SKILL.md` for full process
+
+Use AskUserQuestion tool to ask user:
 1. Do you have a thumbnail ready to upload?
-2. Or should I generate a thumbnail concept prompt?
+2. Should I generate one using the `thumbnail-creator` skill?
+3. Or post UNLISTED now and add thumbnail later (two-phase publishing)?
 
 If user provides thumbnail:
 - Upload to Late storage and get URL
 - Include in post
 
-If user wants concept:
-- Provide text-to-image prompt with:
-  - Phrase (short, bold, benefit-focused)
-  - Layout description
-  - Color specs
-  - Logo placement instructions
+If user wants generation:
+- Invoke the `thumbnail-creator` skill with the concept
+- Upload result to Late storage
+
+If user wants to post unlisted first:
+- Post without thumbnail (unlisted)
+- Generate thumbnail using `thumbnail-creator` skill
+- Upload to YouTube Studio manually
+- Switch to public
 
 ---
 
@@ -217,7 +246,7 @@ If user wants concept:
 4. First comment CTA
 5. Thumbnail status
 
-Confirm: "Ready to post this to YouTube?"
+Use AskUserQuestion to confirm: "Ready to post this to YouTube?"
 
 ---
 
@@ -227,14 +256,14 @@ Confirm: "Ready to post this to YouTube?"
 
 ```bash
 curl -s -X POST "https://getlate.dev/api/v1/posts" \
-  -H "Authorization: Bearer YOUR_LATE_API_KEY" \
+  -H "Authorization: Bearer sk_7e0b73779f132c45094e7c87841bf8582ad3fd0b6204c92b977ffc6303a7d724" \
   -H "Content-Type: application/json" \
   -d '{
     "content": "[DESCRIPTION]",
     "mediaItems": [{"url": "[VIDEO_URL]", "type": "video"}],
     "platforms": [{
       "platform": "youtube",
-      "accountId": "YOUR_YOUTUBE_ACCOUNT_ID",
+      "accountId": "6978050f77637c5c857c82e9",
       "platformSpecificData": {
         "title": "[VIDEO_TITLE]",
         "visibility": "public",
@@ -248,24 +277,106 @@ curl -s -X POST "https://getlate.dev/api/v1/posts" \
 
 ---
 
+## Step 9: Log Post to Content Database
+
+After successful posting, log the post in **two places**: Supabase (for analytics queries) and a local JSON file (for quick reference and backup).
+
+### 9A. Insert into Supabase
+
+Use the Supabase REST API with the service role key to bypass RLS:
+
+```bash
+curl -s -X POST "https://odauskdyxyojmskuaqfu.supabase.co/rest/v1/cf_content_posts_log" \
+  -H "apikey: [ANON_KEY]" \
+  -H "Authorization: Bearer [SERVICE_ROLE_KEY]" \
+  -H "Content-Type: application/json" \
+  -H "Prefer: return=representation" \
+  -d '{
+    "late_post_id": "LATE_POST_ID",
+    "external_post_id": "YOUTUBE_VIDEO_ID",
+    "platform": "youtube",
+    "title": "VIDEO_TITLE",
+    "content": "FULL_DESCRIPTION",
+    "media_url": "VIDEO_URL",
+    "post_url": "https://www.youtube.com/watch?v=VIDEO_ID",
+    "status": "published",
+    "published_at": "ISO_DATETIME",
+    "tags": ["tag1", "tag2", "tag3"],
+    "hashtags": ["Hashtag1", "Hashtag2"],
+    "thumbnail_url": "THUMBNAIL_URL",
+    "lead_magnet_url": "https://infinitxai.com/free/dfy-campaign-builder"
+  }'
+```
+
+**Keys** (from `backend/.env`):
+- `ANON_KEY`: Value of `VITE_SUPABASE_PUBLISHABLE_KEY` from root `.env`
+- `SERVICE_ROLE_KEY`: Value of `SUPABASE_SERVICE_ROLE_KEY` from `backend/.env`
+
+### 9B. Save local JSON log file
+
+Save a JSON file to the `post-logs/` folder inside this skill directory:
+
+**Folder:** `.claude/skills/content-analytics/post-logs/`
+
+**Filename format:** `YYYY-MM-DD_yt_short-slug.json`
+- Date: publish date
+- `yt`: platform abbreviation
+- `short-slug`: 2-4 word kebab-case summary of the video topic
+
+**Example:** `2026-01-27_yt_ai-sales-campaign.json`
+
+**Required fields in the JSON file:**
+```json
+{
+  "supabase_record_id": "UUID from Supabase insert response",
+  "late_post_id": "Late API post ID",
+  "external_post_id": "YouTube video ID",
+  "platform": "youtube",
+  "post_url": "https://www.youtube.com/watch?v=VIDEO_ID",
+  "published_at": "ISO_DATETIME",
+  "title": "Full video title",
+  "description": "Full YouTube description",
+  "tags": ["tag1", "tag2"],
+  "hashtags": ["Hashtag1", "Hashtag2"],
+  "first_comment": "First comment CTA text",
+  "thumbnail_url": "URL to uploaded thumbnail",
+  "media_url": "URL to uploaded video",
+  "lead_magnet_url": "Current lead magnet URL",
+  "source_video": "Local file path to original video"
+}
+```
+
+### Why both?
+- **Supabase:** Enables analytics queries, joins with other tables, used by the `content-analytics` skill
+- **Local JSON:** Lives in `content-analytics/post-logs/` for quick reference without database access, easy to grep/search across all posts, stores the full content package in one place
+
+This enables analytics tracking via the `content-analytics` skill.
+
+---
+
 ## Configuration
 
 ### Late API
 ```
-API Key: YOUR_LATE_API_KEY
-YouTube Account ID: YOUR_YOUTUBE_ACCOUNT_ID
+API Key: sk_7e0b73779f132c45094e7c87841bf8582ad3fd0b6204c92b977ffc6303a7d724
+YouTube Account ID: 6978050f77637c5c857c82e9
 ```
 
 ### Social Links
 ```
-Subscribe: YOUR_YOUTUBE_URL
-LinkedIn: YOUR_LINKEDIN_URL
-Instagram: YOUR_INSTAGRAM_URL
+Subscribe: https://www.youtube.com/@enriquemarq-0
+LinkedIn: https://www.linkedin.com/in/enrique-marq-756191319/
+Instagram: https://www.instagram.com/kikefuturo_/
 ```
 
-### Lead Magnet
+### Branding Colors
+- **Personal brand (thumbnails):** Orange `#F97316`
+- **IX System logo:** Mint green `#4ADE80` on black `#000000`
+- **Text:** Black `#000000` on white, or white `#FFFFFF` on dark
+
+### Lead Magnet (current)
 ```
-YOUR_LEAD_MAGNET_URL
+https://infinitxai.com/free/dfy-campaign-builder
 ```
 
 ### Description Style Rules
@@ -300,3 +411,55 @@ Clean minimalist YouTube thumbnail, [BACKGROUND_COLOR] background, bold [TEXT_CO
 - Benefit-focused (what they GET)
 - Power words: Free, New, Easy, Fast, Automated, AI
 - Avoid: "How to", "Tutorial", generic terms
+
+---
+
+## Example Output Package
+
+**TITLE:**
+```
+How to Create an AI Sales Campaign in Minutes (Full Demo)
+```
+
+**DESCRIPTION:**
+```
+Build your first AI sales campaign for FREE
+https://infinitxai.com/free/dfy-campaign-builder
+
+In this video, I show you exactly how to create a fully automated AI sales campaign from scratch. No complex tools. No coding. Just talk to the AI, and it builds everything for you.
+
+
+My Links:
+Subscribe: https://www.youtube.com/@enriquemarq-0
+LinkedIn: https://www.linkedin.com/in/enrique-marq-756191319/
+Instagram: https://www.instagram.com/kikefuturo_/
+
+
+Timestamps:
+0:00 What We're Building
+0:37 The IX System Overview
+1:37 Campaign Dashboard Tour
+3:11 Setting Up with AI Brain
+10:10 Campaign Generated
+17:08 Uploading Contacts & Launch
+18:43 Live Demo
+22:18 Voice Agent Booking Call
+27:13 Your Free Gift
+
+
+#AIMarketing #SalesCampaign #ClientAcquisition
+```
+
+**TAGS:**
+```json
+["AI sales", "sales campaign", "AI marketing", "get clients", "book appointments", "client acquisition", "agency owner", "marketing agency", "lead generation", "AI agent", "sales automation", "outreach system", "AI tools", "business growth"]
+```
+
+**FIRST COMMENT:**
+```
+Want to build your own AI sales campaign?
+
+https://infinitxai.com/free/dfy-campaign-builder
+
+Set up your campaign in minutes. Let the AI handle outreach, replies, and appointment booking.
+```

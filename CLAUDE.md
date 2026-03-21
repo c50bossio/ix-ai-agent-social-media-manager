@@ -1,14 +1,27 @@
 # IX AI Agent Social Media Manager
 
-You are a social media manager powered by INFINITX AI. Your job is to help the user create and publish content to social media platforms using the Late API and MCP tools.
+The complete AI-powered content creation and distribution system. Create, edit, and publish content across 13+ platforms using Claude Code skills.
 
-## Your Skills
+## Skills (16)
 
-You have 3 skills available:
-
-1. **late-social-media** — Post to any of 13 platforms (Twitter, LinkedIn, Instagram, YouTube, TikTok, etc.)
-2. **short-form-posting** — Post short-form video (Shorts/Reels/TikTok) with unique captions per platform
-3. **youtube-content-package** — Create complete YouTube packages (title, description, tags, timestamps, thumbnail)
+| Category | Skill | Triggers |
+|----------|-------|----------|
+| **Distribution** | `late-social-media` | "post to", "schedule post" |
+| | `short-form-posting` | "post short", "post reel" |
+| | `youtube-content-package` | "youtube package", "publish video" |
+| **Visual Creation** | `thumbnail-creator` | "create thumbnail", "youtube thumbnail" |
+| | `carousel-generator` | "create carousel", "carousel images" |
+| | `document-carousel` | "document carousel", "LinkedIn PDF" |
+| **Video Pipeline** | `clip-extractor` | "extract clips", "reframe video", "face tracking" |
+| | `clip-selection` | "select clips", "find best clips" |
+| | `edit` | "edit video", "edit clip" |
+| | `video-editing` | (invoked by /edit -- router) |
+| | `short-form-editing` | (invoked by router -- <90s) |
+| | `long-form-editing` | (invoked by router -- 5+ min) |
+| | `extracting-transcripts` | "transcribe", "extract transcript" |
+| | `visual-overlay-creation` | "create illustration", "new visual" |
+| **Utility** | `video-upload-helper` | "compress video", "upload video" |
+| | `content-analytics` | "check analytics" |
 
 ## Rules
 
@@ -16,21 +29,119 @@ You have 3 skills available:
 2. **Each platform gets unique content.** Same message, different wording. Never copy-paste across platforms.
 3. **Ask for thumbnails** before posting video content to YouTube.
 4. **Confirm titles** before posting to YouTube.
-5. **Use the Late REST API** (curl) for posts that need platform-specific features (YouTube title/tags, TikTok settings, thread posts).
+5. **Use the Late REST API** (curl) for posts that need platform-specific features.
 6. **Use Late MCP tools** for simple single-platform posts.
+
+## Pipeline Flow
+
+```
+/clip-selection > /clip-extractor > /transcribe > /edit > /post-short
+```
+
+1. **Clip Selection** -- Analyze transcript, score clips (5 categories, 0-100), select best moments
+2. **Clip Extraction** -- Face-tracking reframe (16:9 to 9:16) via Python tool at `tools/clip_extractor/`
+3. **Transcription** -- WhisperX GPU or AssemblyAI for word-level timestamps
+4. **Editing** -- `/edit` routes to `video-editing` (router) then `short-form-editing` or `long-form-editing`
+5. **Publishing** -- `/short-form-posting` or `/youtube-content-package` via Late/Zernio
+
+## Editing Architecture (3-Skill System)
+
+```
+/edit > video-editing (ROUTER) > short-form-editing (<90s)
+                                > long-form-editing (5+ min)
+```
+
+### Format Detection
+
+| Duration | Format | Primary Component | Pop-Outs |
+|----------|--------|------------------|----------|
+| <90s (pipeline) | Short-form | ConceptOverlay | 8-15 |
+| <90s (standalone) | Short-form | AppleStylePopup + FloatingCard | 5-7 |
+| 5+ min | Long-form | ConceptOverlay | 30-40+ |
+
+## Essential Commands
+
+```bash
+# Remotion
+npm run studio                    # Preview in browser
+npm run render -- <Id> out/x.mp4  # Render composition
+
+# Clip Extractor
+cd tools
+python -m clip_extractor reframe --video input.mp4 --output clips/ --format 9x16
+python -m clip_extractor batch --video source.mp4 --clips defs.json --output clips/
+```
+
+## Critical Editing Rules
+
+1. **ALWAYS use WORDS data** (`.ts` files) for frame timing
+2. **Pop-out at EXACT frame** the keyword is spoken
+3. **ILLUSTRATION-FIRST** -- NO caption on most pop-outs
+4. **illustrationSize:** 800 (no text), 700 (with text), 620 (CTA)
+5. **NEVER use template illustrations** -- every pop-out needs UNIQUE visual metaphor
+6. **ALWAYS use real images** for logos (`Img` + `staticFile()`)
+7. **Long-form: NO zoom keyframes** (flat 1.0)
+8. **Background music** 0.02 volume, first 35s only
+9. **SFX J-cut:** sound 2-3 frames BEFORE visual
+10. **SFX variety** -- never repeat same sound consecutively
+
+## Key APIs
+
+### Late / Zernio (Social Posting + Media Storage)
+- **Base URL:** `https://getlate.dev/api/v1`
+- **Upload:** `POST /media/presign` then PUT to upload URL, use `publicUrl`
+- **Post:** `POST /posts` with `platforms[]` array
+- **MCP tools:** `accounts_list`, `posts_create`, `posts_list`, `media_presign`
+
+### KIE.ai (AI Image Generation)
+- **Base URL:** `https://api.kie.ai/api/v1`
+- **Model:** `nano-banana-pro`
+- **Create task:** `POST /jobs/createTask`
+- **Poll status:** `GET /jobs/recordInfo?taskId={id}`
+
+## Brand Assets
+
+### Platform Logos (`public/logos/`)
+x.svg, instagram.svg, linkedin.svg, tiktok.svg, youtube.svg, facebook.svg, threads.svg, bluesky.svg, pinterest.svg, reddit.svg, snapchat.svg, telegram.svg, googlebusiness.svg
+
+### SFX Library (`public/audio/`)
+- Pop: `pop-402324.mp3`
+- Whoosh variants: `whoosh-effect-382717.mp3`, `whoosh-bamboo-389752.mp3`, `whoosh-large-sub-384631.mp3`
+- Background: `background-music.mp3` (volume 0.02)
+
+## Remotion Components
+
+| Component | Use Case | z-index |
+|-----------|----------|---------|
+| ConceptOverlay | Full-screen concept reveal | 100 |
+| AppleStylePopup | Premium white popup | 100 |
+| FloatingCard | Card overlay (speaker visible) | 20 |
+| PlatformCascade | Logo grid reveal | 30 |
+| KineticText | Animated text | 25 |
+
+## File Conventions
+
+- **Compositions:** `remotion/compositions/YourCompositionName.tsx`
+- **Word data:** `remotion/data/your-composition-words.ts`
+- **Illustrations:** `remotion/lib/illustrations/YourIllustrations.tsx`
+- **Output:** `output/` organized by type (thumbnails/, carousels/, documents/, posts/)
+- **FPS:** Always 30
+- **Portrait:** 1080x1920
+- **Landscape:** 1920x1080
+
+## File Organization (Visual Content)
+
+```
+output/
+  thumbnails/YYYY-MM-DD-slug/     # YouTube thumbnails
+  carousels/YYYY-MM-DD-slug/      # AI image carousels
+  documents/YYYY-MM-DD-slug/      # Document carousels (HTML > PDF > PNG)
+  posts/YYYY-MM-DD-slug/          # Mixed-format posts
+```
 
 ## Tone
 
-When writing social media content for the user:
+When writing social media content:
 - Conversational and direct
 - No jargon unless the audience is technical
-- No emojis unless the user requests them
 - Short sentences. Simple words.
-
-## Late MCP
-
-The Late MCP server provides tools for:
-- `accounts_list` — See connected social media accounts
-- `posts_create` — Create and publish posts
-- `posts_list` — See recent posts
-- `media_presign` — Get upload URLs for media files

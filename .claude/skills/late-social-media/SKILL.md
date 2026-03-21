@@ -16,17 +16,14 @@ Post and schedule content to social media platforms using Late API and MCP tools
 
 ### API Key
 ```
-YOUR_LATE_API_KEY
+sk_7e0b73779f132c45094e7c87841bf8582ad3fd0b6204c92b977ffc6303a7d724
 ```
-> Replace with your Late API key from https://getlate.dev → Settings → API Keys
 
 ### Connected Accounts
 | Platform | Username | Account ID |
 |----------|----------|------------|
-| YouTube | YOUR_USERNAME | YOUR_YOUTUBE_ACCOUNT_ID |
-| LinkedIn | YOUR_NAME | YOUR_LINKEDIN_ACCOUNT_ID |
-
-> Run `mcp__late__accounts_list` to see your connected accounts and fill in the table above.
+| YouTube | enriquemarq-0 | 6978050f77637c5c857c82e9 |
+| LinkedIn | Enrique Marq | 6978052b77637c5c857c82ea |
 
 ---
 
@@ -72,14 +69,14 @@ Use AskUserQuestion tool to confirm before posting.
 
 ```bash
 curl -s -X POST "https://getlate.dev/api/v1/posts" \
-  -H "Authorization: Bearer YOUR_LATE_API_KEY" \
+  -H "Authorization: Bearer sk_7e0b73779f132c45094e7c87841bf8582ad3fd0b6204c92b977ffc6303a7d724" \
   -H "Content-Type: application/json" \
   -d '{
     "content": "[DESCRIPTION]",
     "mediaItems": [{"url": "[VIDEO_URL]", "type": "video"}],
     "platforms": [{
       "platform": "youtube",
-      "accountId": "YOUR_YOUTUBE_ACCOUNT_ID",
+      "accountId": "6978050f77637c5c857c82e9",
       "platformSpecificData": {
         "title": "[VIDEO_TITLE]",
         "visibility": "public",
@@ -95,13 +92,13 @@ curl -s -X POST "https://getlate.dev/api/v1/posts" \
 
 ```bash
 curl -s -X POST "https://getlate.dev/api/v1/posts" \
-  -H "Authorization: Bearer YOUR_LATE_API_KEY" \
+  -H "Authorization: Bearer sk_7e0b73779f132c45094e7c87841bf8582ad3fd0b6204c92b977ffc6303a7d724" \
   -H "Content-Type: application/json" \
   -d '{
     "content": "[POST_CONTENT]",
     "platforms": [{
       "platform": "linkedin",
-      "accountId": "YOUR_LINKEDIN_ACCOUNT_ID"
+      "accountId": "6978052b77637c5c857c82ea"
     }],
     "publishNow": true
   }'
@@ -145,7 +142,7 @@ Use the URL directly in `media_urls` or `mediaItems`.
 1. Get presigned URL:
 ```bash
 curl -s -X POST "https://getlate.dev/api/v1/media/presign" \
-  -H "Authorization: Bearer YOUR_LATE_API_KEY" \
+  -H "Authorization: Bearer sk_7e0b73779f132c45094e7c87841bf8582ad3fd0b6204c92b977ffc6303a7d724" \
   -H "Content-Type: application/json" \
   -d '{"filename": "file.mp4", "contentType": "video/mp4"}'
 ```
@@ -177,13 +174,13 @@ Use `threadItems` in `platformSpecificData`. The top-level `content` field is al
 
 ```bash
 curl -s -X POST "https://getlate.dev/api/v1/posts" \
-  -H "Authorization: Bearer YOUR_LATE_API_KEY" \
+  -H "Authorization: Bearer sk_7e0b73779f132c45094e7c87841bf8582ad3fd0b6204c92b977ffc6303a7d724" \
   -H "Content-Type: application/json" \
   -d '{
     "content": "FIRST_TWEET_TEXT",
     "platforms": [{
       "platform": "twitter",
-      "accountId": "YOUR_TWITTER_ACCOUNT_ID",
+      "accountId": "ACCOUNT_ID",
       "platformSpecificData": {
         "threadItems": [
           {"content": "FIRST_TWEET_TEXT"},
@@ -195,19 +192,19 @@ curl -s -X POST "https://getlate.dev/api/v1/posts" \
   }'
 ```
 
-## Threads (Meta) Multi-Post
+## Threads (Meta) Multi-Post Threads
 
 Same `threadItems` pattern. Top-level `content` required.
 
 ```bash
 curl -s -X POST "https://getlate.dev/api/v1/posts" \
-  -H "Authorization: Bearer YOUR_LATE_API_KEY" \
+  -H "Authorization: Bearer sk_7e0b73779f132c45094e7c87841bf8582ad3fd0b6204c92b977ffc6303a7d724" \
   -H "Content-Type: application/json" \
   -d '{
     "content": "FIRST_POST_TEXT",
     "platforms": [{
       "platform": "threads",
-      "accountId": "YOUR_THREADS_ACCOUNT_ID",
+      "accountId": "ACCOUNT_ID",
       "platformSpecificData": {
         "threadItems": [
           {"content": "FIRST_POST_TEXT"},
@@ -228,13 +225,13 @@ Post same content to multiple platforms:
 
 ```bash
 curl -s -X POST "https://getlate.dev/api/v1/posts" \
-  -H "Authorization: Bearer YOUR_LATE_API_KEY" \
+  -H "Authorization: Bearer sk_7e0b73779f132c45094e7c87841bf8582ad3fd0b6204c92b977ffc6303a7d724" \
   -H "Content-Type: application/json" \
   -d '{
     "content": "[POST_CONTENT]",
     "platforms": [
-      {"platform": "linkedin", "accountId": "YOUR_LINKEDIN_ACCOUNT_ID"},
-      {"platform": "youtube", "accountId": "YOUR_YOUTUBE_ACCOUNT_ID", "platformSpecificData": {"title": "[TITLE]"}}
+      {"platform": "linkedin", "accountId": "6978052b77637c5c857c82ea"},
+      {"platform": "youtube", "accountId": "6978050f77637c5c857c82e9", "platformSpecificData": {"title": "[TITLE]"}}
     ],
     "publishNow": true
   }'

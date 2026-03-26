@@ -17,11 +17,11 @@ Adapted from IX Content Factory /done v3.0 for the Social Media Manager pipeline
 
 ---
 
-## 6-Phase Flow
+## 7-Phase Flow
 
 ```
-DISCOVER → VALIDATE → SYNC → REPORT → COMMIT → REFLECT
-   (1)        (2)       (3)     (4)      (5)      (6)
+DISCOVER → VALIDATE → SYNC → REPORT → SESSION LOG → COMMIT → REFLECT
+   (1)        (2)       (3)     (4)        (4.5)       (5)      (6)
 ```
 
 ---
@@ -188,6 +188,56 @@ Generate a summary for the user:
 ### What's Next
 - [Suggested next actions based on current state]
 ```
+
+---
+
+## Phase 4.5: Write Session Log
+
+**Every session gets a log file.** This is how `/continue` picks up context in the next session.
+
+### File Location
+
+`sessions/YYYY-MM-DD-slug.md`
+
+- Date: today's date
+- Slug: 2-4 word kebab-case summary of main work done
+- If multiple sessions on the same day, append a number: `-2`, `-3`
+
+### Template
+
+Write this file using the Write tool:
+
+```markdown
+# Session: [Short Title]
+
+**Date:** YYYY-MM-DD
+**Type:** [Content Pipeline / Feature Work / Bug Fix / Setup / Documentation]
+
+## What Was Done
+- [Accomplishment 1]
+- [Accomplishment 2]
+- [Accomplishment 3]
+
+## Content Produced
+- [List any clips, thumbnails, carousels, posts with their output/ paths]
+
+## Issues Found & Fixed
+- [Problem]: [How it was fixed]
+
+## Documents Updated
+- [List files that were modified]
+
+## What's Next
+- [Suggested next actions for the following session]
+
+## Commit
+- [commit hash] — [commit message summary]
+```
+
+### Rules
+- Always write the session log BEFORE committing (so it's included in the commit)
+- Keep it concise — facts only, no fluff
+- If nothing notable happened, still log it: "Exploratory session, no changes committed"
 
 ---
 

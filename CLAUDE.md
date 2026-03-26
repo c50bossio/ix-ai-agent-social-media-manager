@@ -2,7 +2,7 @@
 
 The complete AI-powered content creation and distribution system. Create, edit, and publish content across 13+ platforms using Claude Code skills.
 
-## Skills (16)
+## Skills (17)
 
 | Category | Skill | Triggers |
 |----------|-------|----------|
@@ -20,6 +20,7 @@ The complete AI-powered content creation and distribution system. Create, edit, 
 | | `long-form-editing` | (invoked by router -- 5+ min) |
 | | `extracting-transcripts` | "transcribe", "extract transcript" |
 | | `visual-overlay-creation` | "create illustration", "new visual" |
+| **Voice** | `voice-dna` | "write post", "create caption", "write description", "draft post" |
 | **Utility** | `video-upload-helper` | "compress video", "upload video" |
 | | `content-analytics` | "check analytics" |
 
@@ -31,6 +32,7 @@ The complete AI-powered content creation and distribution system. Create, edit, 
 4. **Confirm titles** before posting to YouTube.
 5. **Use the Late REST API** (curl) for posts that need platform-specific features.
 6. **Use Late MCP tools** for simple single-platform posts.
+7. **Voice DNA is mandatory.** Before writing ANY social media post, caption, description, script, or written content, load the `voice-dna` skill. All written output must match Enrique's voice — educator-who-corrects-the-room, not a marketing agency. See `.claude/skills/voice-dna/SKILL.md` for the full profile.
 
 ## Session Commands
 
@@ -167,7 +169,24 @@ output/
 
 ## Tone
 
-When writing social media content:
-- Conversational and direct
-- No jargon unless the audience is technical
-- Short sentences. Simple words.
+**All written content follows Enrique's Voice DNA** (`.claude/skills/voice-dna/SKILL.md`).
+
+Quick rules:
+- Educator-who-corrects-the-room. Not storyteller. Not guru.
+- Conversational and direct. Short sentences. Simple words.
+- Open with bold claims or results, never "Hey guys!" or rhetorical questions.
+- No banned words: leverage, optimize, synergy, game-changing, utilize, empower, crucial.
+- CTA is brief, at the end, not pushy.
+
+## Session Tracking
+
+Every `/done` writes a session log to `sessions/YYYY-MM-DD-slug.md`. This creates a running history of what was built, fixed, or posted each session.
+
+```
+sessions/
+  2026-03-25-onboarding-setup.md
+  2026-03-25-clip-extraction-fix.md
+  ...
+```
+
+`/continue` reads the latest session log to pick up where the last session left off.

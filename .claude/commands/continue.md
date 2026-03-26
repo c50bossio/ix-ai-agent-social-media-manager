@@ -29,9 +29,14 @@ LOAD CONTEXT → SYSTEM CHECK → REVIEW STATE → STATUS OUTPUT → SUGGEST NEX
 Read these files in order (skip any that don't exist):
 
 1. **CLAUDE.md** — Project conventions, skills, rules, pipeline flow, editing architecture, APIs, file conventions
-2. **README.md** — Project overview, setup requirements, quick start examples
+2. **Latest session log** — Read the most recent file in `sessions/` to understand what happened last session and what was suggested next
 3. **package.json** — Current dependencies and scripts
 4. **.env** — Verify API keys are set (DO NOT display key values — only confirm presence)
+
+```bash
+# Find the latest session log
+ls -t sessions/*.md 2>/dev/null | head -1
+```
 
 ---
 

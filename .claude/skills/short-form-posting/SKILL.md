@@ -284,7 +284,8 @@ curl -s -X POST "https://getlate.dev/api/v1/posts" \
     "content": "[FALLBACK_CONTENT]",
     "mediaItems": [{
       "url": "[VIDEO_PUBLIC_URL]",
-      "thumbnail": {"url": "[YT_THUMBNAIL_URL]"},
+      "thumbnail": "[YT_THUMBNAIL_URL]",
+      "containsSyntheticMedia": true,
       "instagramThumbnail": "[IG_COVER_URL]"
     }],
     "platforms": [

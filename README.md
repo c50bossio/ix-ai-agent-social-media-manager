@@ -62,18 +62,29 @@ cd ix-ai-agent-social-media-manager
 # Remotion (video engine)
 npm install
 
-# Clip Extractor (Python)
-cd tools
-pip install -r clip_extractor/requirements.txt
+# Clip Extractor (Python face-tracking pipeline)
+# Requires Python 3.10+ and pip
+pip install -r tools/clip_extractor/requirements.txt
 ```
+
+The clip extractor requires these Python packages (all listed in `requirements.txt`):
+- **mediapipe** -- Face detection (BlazeFace)
+- **opencv-contrib-python** -- Video frame processing (cv2)
+- **numpy** -- Array operations
+- **filterpy** -- Kalman filter for temporal smoothing
+- **pyyaml** -- Config parsing
+- **rapidfuzz** -- Fuzzy text matching
+
+> **Troubleshooting:** If clip extraction produces a static center crop instead of face-tracking, verify that `opencv-contrib-python` installed correctly: `python -c "import cv2; print(cv2.__version__)"`. This is the most common setup issue.
 
 ### 3. Set API keys
 
-Create a `.env` file or set environment variables:
+Create a `.env` file in the project root:
 
 ```bash
-export ZERNIO_API_KEY="your-zernio-api-key"  # Required: zernio.com (free to start)
-export KIE_API_KEY="your-kie-api-key"        # Optional: kie.ai (for thumbnails/carousels)
+ZERNIO_API_KEY=your-zernio-api-key        # Required: zernio.com (free to start)
+ZERNIO_PROFILE_ID=your-profile-id         # Required: from your Zernio dashboard
+KIE_API_KEY=your-kie-api-key              # Optional: kie.ai (for thumbnails/carousels)
 ```
 
 ### 4. Open in Claude Code
@@ -83,6 +94,12 @@ claude
 ```
 
 That's it. Claude Code reads the skills automatically. Say "post to LinkedIn" or "create a thumbnail" and it works.
+
+### Session Commands
+
+Once you're in Claude Code:
+- **`/continue`** -- Resume a session. Loads context, checks system readiness, reviews recent work, suggests what to do next.
+- **`/done`** -- Close a session. Validates system, syncs docs, generates a report, commits and pushes.
 
 ---
 
@@ -108,8 +125,8 @@ See `examples/` for more detailed walkthroughs.
 
 - **Claude Code** (or any Claude-powered coding agent)
 - **Node.js 18+** (for Remotion video engine)
-- **Python 3.10+** (for clip extractor)
-- **FFmpeg** (for video processing)
+- **Python 3.10+** with pip (for clip extractor -- face detection, tracking, reframe)
+- **FFmpeg** (for video processing -- [download](https://ffmpeg.org/download.html) or `winget install Gyan.FFmpeg`)
 - **Zernio API key** ([zernio.com](https://zernio.com) -- free to start) for social media posting
 - **KIE API key** ([kie.ai](https://kie.ai)) for AI image generation (optional)
 

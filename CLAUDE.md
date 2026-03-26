@@ -32,6 +32,13 @@ The complete AI-powered content creation and distribution system. Create, edit, 
 5. **Use the Late REST API** (curl) for posts that need platform-specific features.
 6. **Use Late MCP tools** for simple single-platform posts.
 
+## Session Commands
+
+| Command | Purpose | Triggers |
+|---------|---------|----------|
+| `/continue` | Load context, check system, review state, suggest next action | "continue", "resume", "what's next", "where are we" |
+| `/done` | Validate, sync docs, report, commit and push | "done", "wrap up", "commit this", "push it" |
+
 ## Pipeline Flow
 
 ```
@@ -43,6 +50,22 @@ The complete AI-powered content creation and distribution system. Create, edit, 
 3. **Transcription** -- WhisperX GPU or AssemblyAI for word-level timestamps
 4. **Editing** -- `/edit` routes to `video-editing` (router) then `short-form-editing` or `long-form-editing`
 5. **Publishing** -- `/short-form-posting` or `/youtube-content-package` via Late/Zernio
+
+## Clip Extractor — How It Works (IMPORTANT)
+
+The clip extractor does **intelligent face-tracking reframe**, NOT a static center crop. Never use a raw ffmpeg `crop=` filter as a substitute.
+
+**6-stage pipeline:**
+1. **Face Detection** (MediaPipe BlazeFace) -- finds the face every N frames
+2. **Signal Fusion** -- combines face + pose + saliency for robust tracking
+3. **Temporal Smoothing** (Kalman/EMA) -- smooth, natural camera motion
+4. **Deadzone Filtering** -- suppresses micro-jitter so the crop doesn't twitch
+5. **Crop Calculation** -- centers the 9:16 window ON the face (mouth at center)
+6. **Frame-by-frame rendering** -- interpolated crop positions piped through ffmpeg
+
+**Dependencies:** `mediapipe`, `opencv-contrib-python`, `numpy`, `filterpy`, `pyyaml`, `rapidfuzz`
+
+**All extracted clips go to:** `output/clips/YYYY-MM-DD-slug/` with a `clips-metadata.json`
 
 ## Editing Architecture (3-Skill System)
 
@@ -129,15 +152,18 @@ x.svg, instagram.svg, linkedin.svg, tiktok.svg, youtube.svg, facebook.svg, threa
 - **Portrait:** 1080x1920
 - **Landscape:** 1920x1080
 
-## File Organization (Visual Content)
+## File Organization (All Content)
 
 ```
 output/
+  clips/YYYY-MM-DD-slug/          # Extracted/reframed clips + clips-metadata.json
   thumbnails/YYYY-MM-DD-slug/     # YouTube thumbnails
   carousels/YYYY-MM-DD-slug/      # AI image carousels
   documents/YYYY-MM-DD-slug/      # Document carousels (HTML > PDF > PNG)
   posts/YYYY-MM-DD-slug/          # Mixed-format posts
 ```
+
+**CRITICAL:** All output goes in `output/` — never to Downloads, temp, or external locations.
 
 ## Tone
 

@@ -26,11 +26,13 @@ import { Clip4Carousel54Cents } from "./compositions/Clip4Carousel54Cents";
 import { Clip5ThumbnailExactlyWanted } from "./compositions/Clip5ThumbnailExactlyWanted";
 import { Clip6ContentOnlyHalf } from "./compositions/Clip6ContentOnlyHalf";
 import { Clip7PostedThreePlatforms } from "./compositions/Clip7PostedThreePlatforms";
+import { ClaudeCodeVsOpenClaw } from "./compositions/ClaudeCodeVsOpenClaw";
 
 // Word-level timing data
 import { TOTAL_DURATION_FRAMES as CLIP6_V3_DURATION } from "./data/clip6-voice-control-words";
 import { TOTAL_DURATION_FRAMES as CRAFTING_OUTREACH_DURATION } from "./data/crafting-outreach-campaign-words";
 import { TOTAL_DURATION_FRAMES as OPUS46_DURATION } from "./data/opus46-announcement-words";
+import { TOTAL_DURATION_FRAMES as CC_VS_OC_DURATION } from "./data/claude-code-vs-openclaw-words";
 
 import { VIDEO_FPS, RESOLUTIONS } from "./lib/config";
 
@@ -321,6 +323,16 @@ export const RemotionRoot: React.FC = () => {
       />
 
       {/* ── STANDALONE MOTION GRAPHICS ───────────────────────── */}
+
+      {/* Long-Form Comparison: Claude Code vs OpenClaw (5.7 min, AI-narrated, 35 pop-outs) */}
+      <Composition
+        id="ClaudeCodeVsOpenClaw"
+        component={ClaudeCodeVsOpenClaw}
+        durationInFrames={CC_VS_OC_DURATION}
+        fps={VIDEO_FPS}
+        width={1920}
+        height={1080}
+      />
 
       {/* Standalone: "Tool Calling 2.0" — Anthropic programmatic tool calling (30s, no source video) */}
       <Composition

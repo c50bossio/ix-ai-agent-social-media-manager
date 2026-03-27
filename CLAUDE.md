@@ -106,9 +106,10 @@ python -m clip_extractor batch --video source.mp4 --clips defs.json --output cli
 5. **NEVER use template illustrations** -- every pop-out needs UNIQUE visual metaphor
 6. **ALWAYS use real images** for logos (`Img` + `staticFile()`)
 7. **Long-form: NO zoom keyframes** (flat 1.0)
-8. **Background music** 0.02 volume, first 35s only
-9. **SFX J-cut:** sound 2-3 frames BEFORE visual
-10. **SFX variety** -- never repeat same sound consecutively
+8. **Source video audio:** `volume={0}` ONLY when the source has burned-in captions or overlapping narration. For **podcast/interview clips where the speaker's voice IS the content**, use `volume={1}` — muting kills the entire clip.
+9. **Background music** 0.02 volume, first 35s only
+10. **SFX J-cut:** sound 2-3 frames BEFORE visual
+11. **SFX variety** -- never repeat same sound consecutively
 
 ## Key APIs
 

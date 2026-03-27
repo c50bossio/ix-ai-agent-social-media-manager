@@ -291,7 +291,8 @@ Assign SFX by pop-out type. NEVER use the same SFX for every pop-out:
 | SFX pop | 0.20-0.25 | Pop-out entrances |
 | SFX whoosh | 0.14-0.20 | Content transitions |
 | Background music | 0.02 | Barely audible lofi |
-| Content videos | 0.0 | MUTED always |
+| Content videos (burned-in captions) | 0.0 | `volume={0}` — separate narration or burned-in audio |
+| Content videos (podcast/interview) | 1.0 | `volume={1}` — **speaker's voice IS the content** |
 
 ---
 
@@ -455,7 +456,7 @@ interface SfxEvent {
 4. ConceptOverlay solid-white as default
 5. NO zoom keyframes (flat 1.0)
 6. Background music first 35s only at 0.02
-7. Content videos MUTED (`volume={0}`)
+7. Content video audio: `volume={0}` for burned-in captions/separate narration; **`volume={1}` for podcast/interview clips** (speaker's voice IS the content)
 8. `premountFor={fps}` on every Sequence
 9. SFX variety per pop-out type
 10. Split illustrations by section for parallel agent development

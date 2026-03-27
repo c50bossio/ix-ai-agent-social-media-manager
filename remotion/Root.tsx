@@ -28,11 +28,27 @@ import { Clip6ContentOnlyHalf } from "./compositions/Clip6ContentOnlyHalf";
 import { Clip7PostedThreePlatforms } from "./compositions/Clip7PostedThreePlatforms";
 import { ClaudeCodeVsOpenClaw } from "./compositions/ClaudeCodeVsOpenClaw";
 
+// Jensen Huang x Lex Fridman Pipeline Clips
+import { JensenMindOfChild } from "./compositions/JensenMindOfChild";
+import { JensenInferenceIsThinking } from "./compositions/JensenInferenceIsThinking";
+import { JensenWarehousesVsFactories } from "./compositions/JensenWarehousesVsFactories";
+import { JensenAiWontKillJobs } from "./compositions/JensenAiWontKillJobs";
+import { JensenManifestTheFuture } from "./compositions/JensenManifestTheFuture";
+import { JensenIntelligenceCommodity } from "./compositions/JensenIntelligenceCommodity";
+import { JensenSpeedOfLight } from "./compositions/JensenSpeedOfLight";
+
 // Word-level timing data
 import { TOTAL_DURATION_FRAMES as CLIP6_V3_DURATION } from "./data/clip6-voice-control-words";
 import { TOTAL_DURATION_FRAMES as CRAFTING_OUTREACH_DURATION } from "./data/crafting-outreach-campaign-words";
 import { TOTAL_DURATION_FRAMES as OPUS46_DURATION } from "./data/opus46-announcement-words";
 import { TOTAL_DURATION_FRAMES as CC_VS_OC_DURATION } from "./data/claude-code-vs-openclaw-words";
+import { TOTAL_DURATION_FRAMES as JENSEN_MIND_DURATION } from "./data/jensen-mind-of-child-words";
+import { TOTAL_DURATION_FRAMES as JENSEN_INFERENCE_DURATION } from "./data/jensen-inference-is-thinking-words";
+import { TOTAL_DURATION_FRAMES as JENSEN_WAREHOUSES_DURATION } from "./data/jensen-warehouses-vs-factories-words";
+import { TOTAL_DURATION_FRAMES as JENSEN_JOBS_DURATION } from "./data/jensen-ai-wont-kill-jobs-words";
+import { TOTAL_DURATION_FRAMES as JENSEN_MANIFEST_DURATION } from "./data/jensen-manifest-the-future-words";
+import { TOTAL_DURATION_FRAMES as JENSEN_INTELLIGENCE_DURATION } from "./data/jensen-intelligence-commodity-words";
+import { TOTAL_DURATION_FRAMES as JENSEN_SPEED_DURATION } from "./data/jensen-speed-of-light-words";
 
 import { VIDEO_FPS, RESOLUTIONS } from "./lib/config";
 
@@ -332,6 +348,65 @@ export const RemotionRoot: React.FC = () => {
         fps={VIDEO_FPS}
         width={1920}
         height={1080}
+      />
+
+      {/* ── JENSEN HUANG x LEX FRIDMAN (7 clips) ─────────── */}
+
+      <Composition
+        id="JensenMindOfChild"
+        component={JensenMindOfChild}
+        durationInFrames={JENSEN_MIND_DURATION}
+        fps={VIDEO_FPS}
+        width={RESOLUTIONS.portrait.width}
+        height={RESOLUTIONS.portrait.height}
+      />
+      <Composition
+        id="JensenInferenceIsThinking"
+        component={JensenInferenceIsThinking}
+        durationInFrames={JENSEN_INFERENCE_DURATION}
+        fps={VIDEO_FPS}
+        width={RESOLUTIONS.portrait.width}
+        height={RESOLUTIONS.portrait.height}
+      />
+      <Composition
+        id="JensenWarehousesVsFactories"
+        component={JensenWarehousesVsFactories}
+        durationInFrames={JENSEN_WAREHOUSES_DURATION}
+        fps={VIDEO_FPS}
+        width={RESOLUTIONS.portrait.width}
+        height={RESOLUTIONS.portrait.height}
+      />
+      <Composition
+        id="JensenAiWontKillJobs"
+        component={JensenAiWontKillJobs}
+        durationInFrames={JENSEN_JOBS_DURATION}
+        fps={VIDEO_FPS}
+        width={RESOLUTIONS.portrait.width}
+        height={RESOLUTIONS.portrait.height}
+      />
+      <Composition
+        id="JensenManifestTheFuture"
+        component={JensenManifestTheFuture}
+        durationInFrames={JENSEN_MANIFEST_DURATION}
+        fps={VIDEO_FPS}
+        width={RESOLUTIONS.portrait.width}
+        height={RESOLUTIONS.portrait.height}
+      />
+      <Composition
+        id="JensenIntelligenceCommodity"
+        component={JensenIntelligenceCommodity}
+        durationInFrames={JENSEN_INTELLIGENCE_DURATION}
+        fps={VIDEO_FPS}
+        width={RESOLUTIONS.portrait.width}
+        height={RESOLUTIONS.portrait.height}
+      />
+      <Composition
+        id="JensenSpeedOfLight"
+        component={JensenSpeedOfLight}
+        durationInFrames={JENSEN_SPEED_DURATION}
+        fps={VIDEO_FPS}
+        width={RESOLUTIONS.portrait.width}
+        height={RESOLUTIONS.portrait.height}
       />
 
       {/* Standalone: "Tool Calling 2.0" — Anthropic programmatic tool calling (30s, no source video) */}

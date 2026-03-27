@@ -124,7 +124,7 @@ remotion/compositions/{CompositionName}.tsx
 6. **NEVER estimate timing** — Always calculate from transcript data
 7. **premountFor={fps}** on every `<Sequence>`
 8. **Background music at 0.02** — Never above 0.04
-9. **Content videos muted** — `volume={0}` always
+9. **Source video audio:** `volume={0}` ONLY when the source has burned-in captions or overlapping narration. For **podcast/interview clips where the speaker's voice IS the content**, use `volume={1}` — muting kills the entire clip.
 10. **Pop-out at EXACT frame** keyword is spoken
 11. **Visual Restraint** — Score every pop-out A/B/C before adding. See router SKILL.md for Impact Score + Visual Treatment Hierarchy. When in doubt, cut.
 

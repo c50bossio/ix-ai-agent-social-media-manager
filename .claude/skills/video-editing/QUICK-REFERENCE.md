@@ -62,7 +62,7 @@
 - Speaker voiceover: 1.0 (untouched)
 - Sound effects: 0.14-0.25
 - Background music: 0.02-0.04 (barely noticeable)
-- Content videos: volume={0} (muted)
+- Content videos: volume={0} for burned-in captions/separate narration; **volume={1} for podcast/interview clips** (speaker's voice IS the content)
 
 ### Technical
 - Web-optimize videos (`-movflags +faststart`)
@@ -353,7 +353,7 @@ Before calling it done:
 
 **Audio (NEW)**
 - [ ] Background music at 0.02-0.04 volume
-- [ ] Content videos muted (volume={0})
+- [ ] Content video volume correct (volume={0} for burned-in captions; volume={1} for podcast/interview)
 - [ ] SFX volume 0.14-0.25 (not competing with speaker)
 - [ ] Strategic placement (not spammy)
 

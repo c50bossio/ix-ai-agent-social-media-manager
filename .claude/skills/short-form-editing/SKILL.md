@@ -143,7 +143,7 @@ For each edit point identified in Phase 1:
 
 - AppleStylePopup for concept moments (white bg, spring animation)
 - FloatingSourceFrame PIP for source video (top-right, orange border)
-- **RULE:** Source videos always `volume={0}` (muted)
+- **RULE:** Source video audio: `volume={0}` ONLY when the source has burned-in captions or overlapping narration. For **podcast/interview clips where the speaker's voice IS the content**, use `volume={1}` — muting kills the entire clip.
 
 ### Phase 4: Create Illustrations
 
@@ -307,7 +307,7 @@ Pop-outs need breathing room. The speaker's face and voice are the primary conte
 4. **Standalone** composition files (never template with JSX defaultProps).
 5. `premountFor={fps}` on **every** Sequence.
 6. SFX J-cut: **2-3 frames before** visual.
-7. Content videos **MUTED** (`volume={0}`).
+7. Content videos: `volume={0}` ONLY for burned-in captions/separate narration. **Podcast/interview clips: `volume={1}`** — the speaker's voice IS the content.
 8. Background music at **0.02** volume.
 9. **Minimum 210 frames (7s) spacing** between pop-out centers. Never gap-fill for its own sake.
 10. Real logos always (`Img` + `staticFile()`). NEVER recreate as SVG.

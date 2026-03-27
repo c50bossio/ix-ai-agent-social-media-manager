@@ -164,7 +164,8 @@ boxShadow: 0 20px 70px rgba(0,0,0,0.5-0.6), inset 0 1px 0 rgba(255,255,255,0.15-
 | SFX pop | 0.20-0.25 | Pop-out entrances |
 | SFX whoosh | 0.14-0.20 | Transitions, hero moments |
 | Background music | 0.02 | Barely audible lofi (long-form: first 35s only) |
-| Content videos | 0.0 | MUTED always (`volume={0}`) |
+| Content videos (burned-in captions) | 0.0 | `volume={0}` — separate narration or burned-in audio |
+| Content videos (podcast/interview) | 1.0 | `volume={1}` — **speaker's voice IS the content** |
 
 ---
 

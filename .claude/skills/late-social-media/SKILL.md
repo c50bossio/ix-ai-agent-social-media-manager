@@ -8,15 +8,15 @@ allowed-tools:
   - AskUserQuestion
 ---
 
-# Late Social Media Posting
+# Zernio Social Media Posting
 
-Post and schedule content to social media platforms using Late API and MCP tools.
+Post and schedule content to social media platforms using Zernio API and MCP tools.
 
 ## Configuration
 
 ### API Key
 ```
-sk_7e0b73779f132c45094e7c87841bf8582ad3fd0b6204c92b977ffc6303a7d724
+$ZERNIO_API_KEY
 ```
 
 ### Connected Accounts
@@ -63,13 +63,13 @@ For each platform, prepare the required fields:
 
 Use AskUserQuestion tool to confirm before posting.
 
-### Step 3: Post via Late API
+### Step 3: Post via Zernio API
 
 **For YouTube with full features (title, tags, firstComment):**
 
 ```bash
 curl -s -X POST "https://getlate.dev/api/v1/posts" \
-  -H "Authorization: Bearer sk_7e0b73779f132c45094e7c87841bf8582ad3fd0b6204c92b977ffc6303a7d724" \
+  -H "Authorization: Bearer $ZERNIO_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
     "content": "[DESCRIPTION]",
@@ -92,7 +92,7 @@ curl -s -X POST "https://getlate.dev/api/v1/posts" \
 
 ```bash
 curl -s -X POST "https://getlate.dev/api/v1/posts" \
-  -H "Authorization: Bearer sk_7e0b73779f132c45094e7c87841bf8582ad3fd0b6204c92b977ffc6303a7d724" \
+  -H "Authorization: Bearer $ZERNIO_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
     "content": "[POST_CONTENT]",
@@ -142,7 +142,7 @@ Use the URL directly in `media_urls` or `mediaItems`.
 1. Get presigned URL:
 ```bash
 curl -s -X POST "https://getlate.dev/api/v1/media/presign" \
-  -H "Authorization: Bearer sk_7e0b73779f132c45094e7c87841bf8582ad3fd0b6204c92b977ffc6303a7d724" \
+  -H "Authorization: Bearer $ZERNIO_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"filename": "file.mp4", "contentType": "video/mp4"}'
 ```
@@ -174,7 +174,7 @@ Use `threadItems` in `platformSpecificData`. The top-level `content` field is al
 
 ```bash
 curl -s -X POST "https://getlate.dev/api/v1/posts" \
-  -H "Authorization: Bearer sk_7e0b73779f132c45094e7c87841bf8582ad3fd0b6204c92b977ffc6303a7d724" \
+  -H "Authorization: Bearer $ZERNIO_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
     "content": "FIRST_TWEET_TEXT",
@@ -198,7 +198,7 @@ Same `threadItems` pattern. Top-level `content` required.
 
 ```bash
 curl -s -X POST "https://getlate.dev/api/v1/posts" \
-  -H "Authorization: Bearer sk_7e0b73779f132c45094e7c87841bf8582ad3fd0b6204c92b977ffc6303a7d724" \
+  -H "Authorization: Bearer $ZERNIO_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
     "content": "FIRST_POST_TEXT",
@@ -225,7 +225,7 @@ Post same content to multiple platforms:
 
 ```bash
 curl -s -X POST "https://getlate.dev/api/v1/posts" \
-  -H "Authorization: Bearer sk_7e0b73779f132c45094e7c87841bf8582ad3fd0b6204c92b977ffc6303a7d724" \
+  -H "Authorization: Bearer $ZERNIO_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
     "content": "[POST_CONTENT]",

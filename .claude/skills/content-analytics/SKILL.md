@@ -1,11 +1,13 @@
 ---
 name: content-analytics
-description: Retrieve and analyze social media post performance using Late MCP. Use when user wants to check analytics, review post performance, get improvement suggestions, or compare content metrics across platforms.
+description: Retrieve and analyze social media post performance using Zernio MCP. Use when user wants to check analytics, review post performance, get improvement suggestions, or compare content metrics across platforms.
 ---
 
 # Content Analytics
 
 Retrieve analytics for logged posts and provide data-driven improvement recommendations.
+
+> **Requires Zernio analytics add-on** ($1/social set/month). If MCP tool calls return errors, verify the add-on is enabled in your Zernio dashboard before continuing.
 
 ## Quick Commands
 
@@ -15,6 +17,16 @@ Retrieve analytics for logged posts and provide data-driven improvement recommen
 - "What's working?" - Identify top-performing content patterns
 
 ## Workflow
+
+### Step 0: Get Account IDs
+
+Always look up account IDs dynamically — never hardcode them:
+
+```
+Use mcp__late__accounts_list
+```
+
+From the response, note the `id` field for each platform you need (youtube, linkedin, etc.). Use these IDs in all subsequent calls.
 
 ### Step 1: List Logged Posts
 
@@ -158,16 +170,16 @@ Based on data patterns, suggest:
 - [SUGGESTION]
 ```
 
-## Late MCP Account Info
+## Zernio MCP Account Info
 
-To get account IDs for analytics:
+> MCP tools use the `mcp__late__` prefix — this refers to the Zernio MCP server (formerly Late).
+
+To get current account IDs for analytics (always do this dynamically):
 ```
 Use mcp__late__accounts_list
 ```
 
-Current connected accounts:
-- YouTube: enriquemarq-0 (ID: 6978050f77637c5c857c82e9)
-- LinkedIn: Enrique Marq (ID: 6978052b77637c5c857c82ea)
+Use the returned `id` values in analytics calls. Never hardcode account IDs.
 
 ## Notes
 

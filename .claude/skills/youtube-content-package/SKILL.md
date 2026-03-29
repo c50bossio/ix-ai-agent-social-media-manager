@@ -61,7 +61,7 @@ Get-Content "OUTPUT_PATH" -Tail 1
 Get presigned URL:
 ```bash
 curl -s -X POST "https://getlate.dev/api/v1/media/presign" \
-  -H "Authorization: Bearer sk_7e0b73779f132c45094e7c87841bf8582ad3fd0b6204c92b977ffc6303a7d724" \
+  -H "Authorization: Bearer $ZERNIO_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"filename": "video-name.mp4", "contentType": "video/mp4"}'
 ```
@@ -250,20 +250,29 @@ Use AskUserQuestion to confirm: "Ready to post this to YouTube?"
 
 ---
 
-## Step 8: Post via Late API
+## Step 8: Post via Zernio API
 
 **Use REST API for full YouTube features (title, tags, firstComment):**
 
+First get your account ID:
+```bash
+# Get your YouTube account ID
+curl -s "https://getlate.dev/api/v1/accounts" \
+  -H "Authorization: Bearer $ZERNIO_API_KEY" | jq '.[] | select(.platform == "youtube") | .id'
+```
+
+Then post:
 ```bash
 curl -s -X POST "https://getlate.dev/api/v1/posts" \
-  -H "Authorization: Bearer sk_7e0b73779f132c45094e7c87841bf8582ad3fd0b6204c92b977ffc6303a7d724" \
+  -H "Authorization: Bearer $ZERNIO_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
     "content": "[DESCRIPTION]",
-    "mediaItems": [{"url": "[VIDEO_URL]", "type": "video"}],
+    "mediaItems": [{"url": "[VIDEO_URL]", "type": "video", "thumbnail": "[THUMBNAIL_URL]"}],
+    "containsSyntheticMedia": true,
     "platforms": [{
       "platform": "youtube",
-      "accountId": "6978050f77637c5c857c82e9",
+      "accountId": "[YOUTUBE_ACCOUNT_ID]",
       "platformSpecificData": {
         "title": "[VIDEO_TITLE]",
         "visibility": "public",
@@ -356,10 +365,10 @@ This enables analytics tracking via the `content-analytics` skill.
 
 ## Configuration
 
-### Late API
+### Zernio API
 ```
-API Key: sk_7e0b73779f132c45094e7c87841bf8582ad3fd0b6204c92b977ffc6303a7d724
-YouTube Account ID: 6978050f77637c5c857c82e9
+API Key: $ZERNIO_API_KEY  (set in .env)
+YouTube Account ID: use accounts_list MCP tool to get your account ID
 ```
 
 ### Social Links

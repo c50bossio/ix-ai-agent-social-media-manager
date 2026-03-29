@@ -284,12 +284,12 @@ Starting with real face references saves passes, saves cost, and produces more c
 
 ### Upload Assets for KIE API
 
-Before generation, upload face reference images to get publicly accessible URLs. You can use the Late API presigned upload:
+Before generation, upload face reference images to get publicly accessible URLs. You can use the Zernio API presigned upload:
 
 ```bash
 # Upload face reference to get a public URL
 curl -s -X POST "https://getlate.dev/api/v1/media/presign" \
-  -H "Authorization: Bearer $LATE_API_KEY" \
+  -H "Authorization: Bearer $ZERNIO_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"filename": "face-reference.png", "contentType": "image/png"}'
 
@@ -485,8 +485,8 @@ Save to `output/thumbnails/{video-slug}/prompts.json`:
 
 If the video is already posted, upload the thumbnail:
 
-1. Upload to Late storage (get URL)
-2. Set thumbnail in YouTube Studio (Late API cannot update thumbnails on existing posts)
+1. Upload to Zernio storage (get URL)
+2. Set thumbnail in YouTube Studio (Zernio API cannot update thumbnails on existing posts)
 3. Change visibility to PUBLIC once thumbnail is set
 
 ---
@@ -525,7 +525,7 @@ At end of every invocation:
 ### API Keys
 ```
 KIE_API_KEY: (environment variable)
-LATE_API_KEY: (environment variable, for storage uploads)
+ZERNIO_API_KEY: (environment variable, for storage uploads)
 ```
 
 ### File Paths

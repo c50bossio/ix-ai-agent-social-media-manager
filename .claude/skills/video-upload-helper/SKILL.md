@@ -1,6 +1,6 @@
 ---
 name: video-upload-helper
-description: Upload and compress videos for YouTube publishing. Handles local compression via HandBrake and upload to Late storage.
+description: Upload and compress videos for YouTube publishing. Handles local compression via HandBrake and upload to Zernio storage.
 allowed-tools:
   - Bash(*)
   - Read
@@ -14,16 +14,16 @@ Compress and upload videos for YouTube publishing via Late.
 ## Quick Start
 
 User provides: Local video file path
-Output: Video URL ready for Late publishing (under 500MB)
+Output: Video URL ready for Zernio publishing (under 500MB)
 
 ## API Key
 ```
-sk_7e0b73779f132c45094e7c87841bf8582ad3fd0b6204c92b977ffc6303a7d724
+$ZERNIO_API_KEY
 ```
 
 ## Size Limit
 
-**IMPORTANT:** Late has a 500MB upload limit. All videos must be compressed to under 500MB before uploading.
+**IMPORTANT:** Zernio has a 500MB upload limit. All videos must be compressed to under 500MB before uploading.
 
 ---
 
@@ -72,11 +72,11 @@ Get-Content "OUTPUT_PATH" -Tail 1
 
 If still over 500MB, increase quality value (higher = smaller file) and re-compress.
 
-### Step 3: Get Late Presigned Upload URL
+### Step 3: Get Zernio Presigned Upload URL
 
 ```bash
 curl -s -X POST "https://getlate.dev/api/v1/media/presign" \
-  -H "Authorization: Bearer sk_7e0b73779f132c45094e7c87841bf8582ad3fd0b6204c92b977ffc6303a7d724" \
+  -H "Authorization: Bearer $ZERNIO_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"filename": "video-name.mp4", "contentType": "video/mp4"}'
 ```
@@ -89,7 +89,7 @@ curl -s -X POST "https://getlate.dev/api/v1/media/presign" \
 }
 ```
 
-### Step 4: Upload to Late Storage
+### Step 4: Upload to Zernio Storage
 
 ```bash
 curl -X PUT "$UPLOAD_URL" \

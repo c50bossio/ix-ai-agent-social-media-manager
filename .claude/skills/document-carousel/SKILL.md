@@ -400,13 +400,13 @@ First comment: [text]
 
 ## Phase 6: Publish (Optional)
 
-### Upload media to Late storage
+### Upload media to Zernio storage
 
 ```bash
 # Upload each page image
 for i in 1 2 3 4 5 6 7 8; do
   PRESIGN=$(curl -s -X POST "https://getlate.dev/api/v1/media/presign" \
-    -H "Authorization: Bearer $LATE_API_KEY" \
+    -H "Authorization: Bearer $ZERNIO_API_KEY" \
     -H "Content-Type: application/json" \
     -d "{\"filename\": \"carousel-page-${i}.png\", \"contentType\": \"image/png\"}")
   UPLOAD_URL=$(echo "$PRESIGN" | python -c "import sys,json; print(json.load(sys.stdin)['uploadUrl'])")
@@ -415,7 +415,7 @@ for i in 1 2 3 4 5 6 7 8; do
 done
 ```
 
-**RULE:** Domain is `getlate.dev` -- NOT `api.getlate.dev`.
+**RULE:** Zernio API domain is `getlate.dev` -- NOT `api.getlate.dev`.
 
 ### Post via single multi-platform REST request
 
@@ -423,7 +423,7 @@ done
 
 ```bash
 curl -s -X POST "https://getlate.dev/api/v1/posts" \
-  -H "Authorization: Bearer $LATE_API_KEY" \
+  -H "Authorization: Bearer $ZERNIO_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
     "content": "[FALLBACK_CONTENT]",
@@ -466,7 +466,7 @@ For YouTube (video post -- separate call since it uses video not images):
 
 ```bash
 curl -s -X POST "https://getlate.dev/api/v1/posts" \
-  -H "Authorization: Bearer $LATE_API_KEY" \
+  -H "Authorization: Bearer $ZERNIO_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
     "content": "[YT_DESCRIPTION]",
@@ -492,7 +492,7 @@ To find your account IDs, list your connected accounts:
 
 ```bash
 curl -s "https://getlate.dev/api/v1/accounts" \
-  -H "Authorization: Bearer $LATE_API_KEY"
+  -H "Authorization: Bearer $ZERNIO_API_KEY"
 ```
 
 This returns all connected social accounts with their IDs and platforms.
@@ -526,9 +526,9 @@ Report to user: Post IDs, platform status, any failures.
 5. **Google Docs aesthetic** -- clean, restrained, professional
 6. **Platform-tailored captions** -- never copy-paste the same text across platforms
 7. **Single multi-platform API call** -- never fire separate calls per platform
-8. **Domain is `getlate.dev`** -- NOT `api.getlate.dev`
+8. **Zernio domain is `getlate.dev`** -- NOT `api.getlate.dev`
 
 ---
 
 **Version:** 1.0
-**Tools:** Chrome headless (PDF), PyMuPDF (page extraction), FFmpeg (slideshow), Late API (publishing)
+**Tools:** Chrome headless (PDF), PyMuPDF (page extraction), FFmpeg (slideshow), Zernio API (publishing)

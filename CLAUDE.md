@@ -32,7 +32,7 @@ The complete AI-powered content creation and distribution system. Create, edit, 
 4. **Confirm titles** before posting to YouTube.
 5. **Use the Late REST API** (curl) for posts that need platform-specific features.
 6. **Use Late MCP tools** for simple single-platform posts.
-7. **Voice DNA is mandatory.** Before writing ANY social media post, caption, description, script, or written content, load the `voice-dna` skill. All written output must match Enrique's voice — educator-who-corrects-the-room, not a marketing agency. See `.claude/skills/voice-dna/SKILL.md` for the full profile.
+7. **Voice DNA is mandatory.** Before writing ANY content, load the `voice-dna` skill. It reads the active brand from `brands/config.json` and loads the correct voice profile from `brands/{slug}/voice-dna.md`. Never mix brand voices.
 
 ## Session Commands
 
@@ -168,16 +168,46 @@ output/
 
 **CRITICAL:** All output goes in `output/` — never to Downloads, temp, or external locations.
 
-## Tone
+## Multi-Brand System
 
-**All written content follows Enrique's Voice DNA** (`.claude/skills/voice-dna/SKILL.md`).
+**Content creation supports multiple brands** via `brands/` directory.
 
-Quick rules:
-- Educator-who-corrects-the-room. Not storyteller. Not guru.
-- Conversational and direct. Short sentences. Simple words.
-- Open with bold claims or results, never "Hey guys!" or rhetorical questions.
-- No banned words: leverage, optimize, synergy, game-changing, utilize, empower, crucial.
-- CTA is brief, at the end, not pushy.
+| Brand | Slug | Handle | Primary Platforms |
+|-------|------|--------|-------------------|
+| 6FB Mentorship | `6fbarber` | @6fbarber | Instagram, YouTube |
+| Tomb45 | `tomb45` | @tomb45 | Instagram, YouTube, TikTok |
+| Pie Accounting | `pieaccounting` | @pieaccounting | Instagram, LinkedIn |
+
+### Brand Commands
+```bash
+python3 brands/brand_manager.py active           # Show active brand
+python3 brands/brand_manager.py switch <slug>     # Switch active brand
+python3 brands/brand_manager.py list              # List all brands
+python3 brands/brand_manager.py voice <slug>      # Output voice DNA
+```
+
+### Brand Files
+```
+brands/
+  config.json                    # Active brand + API settings
+  brand_manager.py               # CLI for brand switching
+  6fbarber/
+    brand.json                   # Colors, accounts, platforms
+    voice-dna.md                 # Voice profile
+  tomb45/
+    brand.json
+    voice-dna.md
+  pieaccounting/
+    brand.json
+    voice-dna.md
+```
+
+### Quick Rules (All Brands)
+- Load Voice DNA before writing ANY content
+- Each brand has its own voice — never mix them
+- Account IDs come from `brand.json`, never hardcode
+- Open with bold claims or results, never generic greetings
+- CTA is brief, at the end, not pushy
 
 ## Session Tracking
 
@@ -191,3 +221,108 @@ sessions/
 ```
 
 `/continue` reads the latest session log to pick up where the last session left off.
+
+## ClipQA AutoEvolver — Self-Improving Pipeline
+
+> ⚠️ This system was built on top of the existing pipeline and skills. It does NOT replace or modify any existing skills.
+
+The AutoEvolver is a feedback loop that autonomously improves clip quality:
+
+```
+Generate (full_pipeline.py) → Audit (Claude Vision) → Diagnose → Patch (config.yaml) → Loop
+```
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `tools/pipeline/clip_qa_evolver.py` | Main orchestrator — parallel Generate/Audit/Diagnose/Patch loop |
+| `tools/pipeline/config_patcher.py` | Safe, bounded config.yaml adjuster with rollback |
+| `tools/pipeline/test_corpus.json` | 8-video test corpus (one per content type) |
+| `tools/clip_extractor/config.yaml` | The tunable config — AutoEvolver patches this |
+
+### Running a Sprint
+
+```bash
+# Quick sprint (5 iterations)
+bash /Users/bossio/.gemini/antigravity/scratch/run_sprint.sh
+
+# Manual full sprint (raw rubric — default for extraction-only)
+cd tools
+PYTHONPATH=. PYTHONUNBUFFERED=1 python -m pipeline.clip_qa_evolver \
+  --corpus-file pipeline/test_corpus.json \
+  --iterations 25 \
+  --auto-patch \
+  --budget 100 \
+  --clips 3 \
+  --rubric raw
+
+# Production sprint (full rubric — use with --compose pipeline runs)
+# python -m pipeline.clip_qa_evolver --rubric full ...
+
+# Monitor live
+tail -f /Users/bossio/.gemini/antigravity/scratch/overnight_sprint.log
+```
+
+### Two-Phase Architecture (IMPORTANT)
+
+Sprints run in **Option A mode** (training-only) by default:
+- `--no-post` is always set — clips are never published during sprints
+- `--compose` is NOT passed — Remotion overlay rendering (Steps 6-9) is skipped for speed
+- Only the raw Python extraction + face-tracking is evaluated by Claude Vision QA
+
+To produce final production clips with overlays + captions, run the pipeline manually with `--compose`.
+
+### 8 Content Types (Test Corpus)
+
+| Type | Video | Focus |
+|------|-------|-------|
+| vlog | Bossio Vlog Miami FINISHED.mp4 | Erratic movement, face tracking |
+| product_review | Untitled Project 7_without_silence.mp4 | Object showcase, jump cuts |
+| podcast | Ecamm Live Recording 2026-01-20.mov | Multi-speaker, hooks |
+| interview | Ecamm Live Recording 2026-01-22.mov | Q&A, split-screen layout |
+| tutorial | VIDEO-2026-01-17-12-34-24.mp4 | Step-by-step, no visual cuts |
+| motivational | Felix snowball 26.mov | High energy, punchlines |
+| day_in_the_life | Barber Shopping _ My Barber Life Vlog 2015.mp4 | B-roll + talking head |
+| mentorship | alexis.mov | Direct-to-camera, 1:1 framing |
+
+### Safety Guardrails (Hard Limits — DO NOT LOWER)
+
+These were introduced after the AutoEvolver hallucinated faces from seatbelts and windows:
+
+| Guard | Location | Value | Reason |
+|-------|----------|-------|--------|
+| Min face confidence | `config_patcher.py` DEFECT_PATCH_MAP | `0.45` floor | Below 0.45 causes false positives on reflective surfaces |
+| Max face regions | `split_renderer.py` `_compute_adaptive_regions()` | 3 max | Prevents micro-slicing into unusable strips |
+| Max clip duration | `boundary_validator.py` | 60s hard cap | Prevents rambling clips |
+| Boundary search window | `full_pipeline.py` | 5.0s | Ensures sentence boundary detection without overreach |
+
+### FFmpeg Critical Note
+
+When extracting clips with fast-seek (`-ss` before `-i`), the internal timestamp resets to 0:
+- ✅ Use `-t {duration}` (relative duration)
+- ❌ Never use `-to {end_sec}` (absolute timestamp — causes EOF with fast-seek)
+
+This is implemented in `tools/clip_extractor/core/pipeline.py` `extract_clip()`.
+
+### QA Scoring (Two Rubrics)
+
+**Raw Extraction** (`--rubric raw`, default): 4 dimensions, max **40**
+`frame_composition`, `face_tracking`, `hook_quality`, `ending_quality`
+Target: **28+/40** (70%) — use during AutoEvolver sprints without `--compose`.
+
+**Full Production** (`--rubric full`): 8 dimensions, max **80**
+`frame_composition`, `face_tracking`, `hook_quality`, `ending_quality`, `audio_sync`, `pacing`, `multi_speaker`, `overall_watchability`
+Target: **60+/80** — use for `--compose` production runs with Remotion overlays.
+
+### Sprint Output Locations
+
+```
+output/.evolver/
+  iter_clips/{content_type}/     # Raw generated clips per iteration
+  reports/iteration_NNN.md       # Per-iteration score report
+.learnings/ERRORS.md             # Cumulative defect log (self-improving)
+tools/clip_extractor/
+  config.yaml                    # Actively patched by AutoEvolver
+  .config_history/               # Backup of every config version
+```

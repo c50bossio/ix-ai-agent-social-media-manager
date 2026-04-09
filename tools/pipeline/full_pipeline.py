@@ -40,6 +40,7 @@ sys.path.insert(0, str(PROJECT_ROOT / "tools"))
 from clip_extractor.selection.boundary_validator import (
     validate_and_fix_boundaries,
     validated_to_clip_definitions,
+    parse_srt,
 )
 from clip_extractor.analytics.performance_tracker import PerformanceTracker
 from pipeline.overlay_matcher import generate_clip_spec
@@ -187,6 +188,68 @@ def _save_word_timestamps(result: dict, output_dir: str, video_name: str) -> str
     return str(words_path)
 
 
+ACTION_WORDS = [
+    'clipper', 'razor', 'product', 'tool', 'guard', 'blade', 'trimmer',
+    'showing', 'look at', 'watch this', 'see how', 'check this',
+    'hold it', 'this right here', 'scissor', 'comb', 'detailer',
+]
+
+
+def _generate_context_hints(srt_path: str) -> list[dict]:
+    """Scan SRT transcript for action words indicating tools/objects.
+
+    Returns timestamp ranges where the crop should widen to show more context.
+    Each hint has start_sec and end_sec (expanded ±3s around the match).
+    """
+    import re as _re
+
+    SRT_TS = _re.compile(
+        r'(\d{2}:\d{2}:\d{2}[,.]\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}[,.]\d{3})'
+    )
+
+    def to_sec(ts: str) -> float:
+        ts = ts.replace(",", ".")
+        h, m, s = ts.split(":")
+        return int(h) * 3600 + int(m) * 60 + float(s)
+
+    hints = []
+    try:
+        with open(srt_path, encoding="utf-8") as f:
+            content = f.read()
+        blocks = content.strip().split("\n\n")
+        for block in blocks:
+            lines = block.strip().splitlines()
+            if len(lines) < 3:
+                continue
+            m = SRT_TS.search(lines[1])
+            if not m:
+                continue
+            seg_start, seg_end = to_sec(m.group(1)), to_sec(m.group(2))
+            text = " ".join(lines[2:]).lower()
+            for word in ACTION_WORDS:
+                if word in text:
+                    hints.append({
+                        "start_sec": max(0, seg_start - 3.0),
+                        "end_sec": seg_end + 3.0,
+                        "trigger": word,
+                    })
+                    break  # One hint per segment is enough
+    except Exception:
+        pass  # Non-critical — crop works fine without hints
+
+    # Merge overlapping hints
+    if not hints:
+        return []
+    hints.sort(key=lambda h: h["start_sec"])
+    merged = [hints[0]]
+    for h in hints[1:]:
+        if h["start_sec"] <= merged[-1]["end_sec"]:
+            merged[-1]["end_sec"] = max(merged[-1]["end_sec"], h["end_sec"])
+        else:
+            merged.append(h)
+    return merged
+
+
 def _interpolate_words_from_srt(srt_path: str, clip_start: float, clip_end: float) -> list:
     """Fallback: parse SRT segments and interpolate per-word timings."""
     import re as _re
@@ -223,7 +286,7 @@ def _interpolate_words_from_srt(srt_path: str, clip_start: float, clip_end: floa
                 w_start = seg_start + i * dur
                 w_end   = w_start + dur
                 if w_start >= clip_start - 0.1 and w_end <= clip_end + 0.1:
-                    words.append({"word": word, "start": round(w_start, 3), "end": round(w_end, 3)})
+                    words.append({"word": word, "start": round(w_start - clip_start, 3), "end": round(w_end - clip_start, 3)})
     except Exception as e:
         print(f"  ⚠️  SRT word interpolation failed: {e}")
     return words
@@ -248,7 +311,9 @@ def generate_captions_for_clip(
             with open(words_json_path) as f:
                 all_words = json.load(f)
             clip_words = [
-                {"word": w["word"], "start": w["start"], "end": w["end"]}
+                {"word": w["word"],
+                 "start": round(w["start"] - clip_start, 3),
+                 "end": round(w["end"] - clip_start, 3)}
                 for w in all_words
                 if w.get("start", 0) >= clip_start - 0.1
                 and w.get("end",   0) <= clip_end   + 0.1
@@ -417,6 +482,297 @@ def _fallback_center_crop(
     return outputs
 
 
+def _find_srt_segment_at(srt_segments: list, timestamp: float) -> tuple:
+    """Find the SRT segment index at or nearest to a timestamp.
+
+    Handles the common case where the timestamp falls in a gap between segments
+    (WhisperX timestamps often have small gaps). Returns (index, segment) or
+    (None, None) if no segment is close enough.
+    """
+    # Exact containment
+    for i, seg in enumerate(srt_segments):
+        if seg["start"] <= timestamp <= seg["end"]:
+            return i, seg
+
+    # Falls in gap — find nearest segment within 1s
+    best_i, best_seg, best_dist = None, None, float("inf")
+    for i, seg in enumerate(srt_segments):
+        # Check distance to segment start and end
+        dist_to_start = abs(seg["start"] - timestamp)
+        dist_to_end = abs(seg["end"] - timestamp)
+        d = min(dist_to_start, dist_to_end)
+        if d < best_dist and d < 1.0:
+            best_dist = d
+            best_i = i
+            best_seg = seg
+
+    return best_i, best_seg
+
+
+def _apply_hook_quality_gate(clips: list, srt_segments: list, search_window: float = 8.0) -> int:
+    """Ensure each clip starts at a clean sentence boundary.
+
+    If the first word of a clip is mid-sentence (lowercase, no sentence-ending
+    punctuation before it, or is a transition word), fix using three strategies:
+    1. Search backward for the previous sentence boundary (punctuation)
+    2. Search backward for a speech gap >= 0.5s (natural pause)
+    3. Search forward up to 3s for the next clean sentence start
+
+    Prefers backward (more context), but uses forward if backward would extend
+    clip by more than 5s or if no backward boundary found.
+
+    Returns the number of clips adjusted.
+    """
+    import re
+    fixes = 0
+    transition_words = {"so", "and", "but", "because", "well", "basically",
+                        "like", "honestly", "also", "right", "yeah", "ok",
+                        "okay", "now", "then", "anyway", "actually"}
+
+    for clip in clips:
+        start = clip["start"]
+        clip_end = clip["end"]
+        # Find the SRT segment at or nearest to the clip start
+        i, seg = _find_srt_segment_at(srt_segments, start)
+        if i is not None and seg is not None:
+            text = seg["text"].strip()
+            if text:
+                first_word = text.split()[0] if text.split() else ""
+                first_word_clean = re.sub(r'^[\"\'\(\[]+', '', first_word)
+
+                is_mid_sentence = (
+                    first_word_clean
+                    and first_word_clean[0].islower()
+                    and first_word_clean.lower() not in ("i",)
+                )
+                is_transition = first_word_clean.lower().rstrip(",.!?") in transition_words
+
+                # Exception: large gap before this segment = natural boundary
+                if i > 0:
+                    gap = seg["start"] - srt_segments[i - 1]["end"]
+                    if gap >= 0.8:
+                        continue  # Not mid-sentence, gap indicates new thought
+
+                if is_mid_sentence or is_transition:
+                    # --- Strategy 1: Search backward for punctuation boundary ---
+                    best_backward = None
+                    for j in range(i - 1, -1, -1):
+                        prev_seg = srt_segments[j]
+                        if start - prev_seg["end"] > search_window:
+                            break
+                        prev_text = prev_seg["text"].strip()
+                        if prev_text and re.search(r'[.!?][\s"\']*$', prev_text):
+                            if j + 1 < len(srt_segments):
+                                best_backward = srt_segments[j + 1]["start"]
+                            break
+
+                    # --- Strategy 2: Search backward for speech gap ---
+                    best_gap_backward = None
+                    for j in range(i, 0, -1):
+                        gap = srt_segments[j]["start"] - srt_segments[j - 1]["end"]
+                        if start - srt_segments[j]["start"] > search_window:
+                            break
+                        if gap >= 0.5:
+                            best_gap_backward = srt_segments[j]["start"]
+                            break
+
+                    # --- Strategy 3: Search forward for next sentence start ---
+                    best_forward = None
+                    forward_limit = 5.0  # Don't skip more than 5s of content
+                    for j in range(i + 1, len(srt_segments)):
+                        fwd_seg = srt_segments[j]
+                        if fwd_seg["start"] - start > forward_limit:
+                            break
+                        # Check if previous segment ends with punctuation
+                        if j > 0:
+                            prev_text = srt_segments[j - 1]["text"].strip()
+                            if prev_text and re.search(r'[.!?][\s"\']*$', prev_text):
+                                best_forward = fwd_seg["start"]
+                                break
+                        # Check for gap before this segment
+                        gap = fwd_seg["start"] - srt_segments[j - 1]["end"]
+                        if gap >= 0.5:
+                            best_forward = fwd_seg["start"]
+                            break
+
+                    # --- Choose best fix ---
+                    chosen = None
+
+                    # Prefer backward punctuation if within 5s
+                    if best_backward is not None and start - best_backward <= 5.0:
+                        chosen = best_backward
+                    # Fall back to backward gap
+                    elif best_gap_backward is not None and start - best_gap_backward <= 5.0:
+                        chosen = best_gap_backward
+                    # Fall back to backward punctuation even if >5s
+                    elif best_backward is not None:
+                        chosen = best_backward
+                    # Use forward if backward options are too far or missing
+                    elif best_forward is not None:
+                        chosen = best_forward
+                    # Last resort: backward gap even if far
+                    elif best_gap_backward is not None:
+                        chosen = best_gap_backward
+
+                    if chosen is not None and chosen != start:
+                        direction = "backward" if chosen < start else "forward"
+                        # Ensure minimum 25s clip after adjustment
+                        if clip_end - chosen >= 25.0:
+                            clip["start"] = chosen
+                            fixes += 1
+                            print(f"  🎯 Hook gate: clip {clip['id']} start shifted {direction} {start:.1f}s → {chosen:.1f}s (was mid-sentence)")
+    return fixes
+
+
+def _apply_ending_quality_gate(clips: list, srt_segments: list, search_window: float = 8.0) -> int:
+    """Ensure each clip ends at a complete sentence.
+
+    If the transcript at the clip's end doesn't have sentence-ending punctuation,
+    fix using three strategies:
+    1. Extend forward to next sentence end (punctuation)
+    2. Extend forward to next speech gap >= 0.5s (natural pause)
+    3. Trim backward to last complete sentence or speech gap
+
+    Returns the number of clips adjusted.
+    """
+    import re
+    fixes = 0
+    max_duration = 90.0
+    min_duration = 25.0
+
+    for clip in clips:
+        end = clip["end"]
+        start = clip["start"]
+        seg_idx, seg = _find_srt_segment_at(srt_segments, end)
+        if seg_idx is None:
+            continue
+
+        text = seg["text"].strip()
+
+        # Already ends at sentence boundary?
+        if text and re.search(r'[.!?][\s"\']*$', text):
+            continue
+
+        # Also check: does the clip end at a speech gap?
+        if seg_idx + 1 < len(srt_segments):
+            gap_after = srt_segments[seg_idx + 1]["start"] - seg["end"]
+            if gap_after >= 0.8 and abs(end - seg["end"]) < 0.5:
+                continue  # Ending at a natural pause is fine
+
+        # --- Strategy 1: Extend forward to next sentence end (punctuation) ---
+        best_end = None
+        for j in range(seg_idx, len(srt_segments)):
+            fwd_seg = srt_segments[j]
+            if fwd_seg["end"] - end > search_window:
+                break
+            fwd_text = fwd_seg["text"].strip()
+            if fwd_text and re.search(r'[.!?][\s"\']*$', fwd_text):
+                candidate = fwd_seg["end"]
+                if candidate - start <= max_duration:
+                    best_end = candidate
+                break
+
+        # --- Strategy 2: Extend forward to next speech gap ---
+        if best_end is None:
+            for j in range(seg_idx + 1, len(srt_segments)):
+                if srt_segments[j]["start"] - end > search_window:
+                    break
+                if j > 0:
+                    gap = srt_segments[j]["start"] - srt_segments[j - 1]["end"]
+                    if gap >= 0.5:
+                        candidate = srt_segments[j - 1]["end"]
+                        if candidate - start <= max_duration and candidate > end:
+                            best_end = candidate
+                        break
+
+        # --- Strategy 3: Trim backward to last sentence end or gap ---
+        if best_end is None:
+            # Try punctuation first
+            for j in range(seg_idx - 1, -1, -1):
+                bwd_seg = srt_segments[j]
+                if end - bwd_seg["end"] > search_window:
+                    break
+                bwd_text = bwd_seg["text"].strip()
+                if bwd_text and re.search(r'[.!?][\s"\']*$', bwd_text):
+                    candidate = bwd_seg["end"]
+                    if candidate - start >= min_duration:
+                        best_end = candidate
+                    break
+
+            # Try gap-based trim
+            if best_end is None:
+                for j in range(seg_idx, 0, -1):
+                    if end - srt_segments[j]["start"] > search_window:
+                        break
+                    gap = srt_segments[j]["start"] - srt_segments[j - 1]["end"]
+                    if gap >= 0.5:
+                        candidate = srt_segments[j - 1]["end"]
+                        if candidate - start >= min_duration:
+                            best_end = candidate
+                        break
+
+        if best_end is not None and best_end != end:
+            direction = "extended" if best_end > end else "trimmed"
+            clip["end"] = best_end
+            fixes += 1
+            print(f"  🎯 Ending gate: clip {clip['id']} end {direction} {end:.1f}s → {best_end:.1f}s (was mid-sentence)")
+    return fixes
+
+
+FILLER_WORDS = frozenset({
+    "um", "uh", "uh-huh", "yeah", "like", "basically",
+    "right", "ok", "okay", "so", "well", "anyway",
+    "actually", "literally", "honestly", "obviously",
+})
+
+
+def _compute_dead_air_score(clip_start: float, clip_end: float, srt_segments: list) -> dict:
+    """Analyze a clip's SRT segments for dead air, filler density, and silence.
+
+    Returns dict with speech_ratio, filler_ratio, max_silence, is_dead_air.
+    """
+    duration = clip_end - clip_start
+    if duration <= 0:
+        return {"speech_ratio": 0, "filler_ratio": 0, "max_silence": duration, "is_dead_air": True}
+
+    relevant = [s for s in srt_segments
+                if s["end"] > clip_start and s["start"] < clip_end]
+
+    if not relevant:
+        return {"speech_ratio": 0, "filler_ratio": 0, "max_silence": duration, "is_dead_air": True}
+
+    # Speech time within clip bounds
+    speech_time = sum(
+        min(s["end"], clip_end) - max(s["start"], clip_start)
+        for s in relevant
+    )
+    speech_ratio = speech_time / duration
+
+    # Filler word ratio
+    all_words = []
+    for s in relevant:
+        all_words.extend(s["text"].lower().split())
+    filler_count = sum(1 for w in all_words if w.strip(".,!?\"'()") in FILLER_WORDS)
+    filler_ratio = filler_count / len(all_words) if all_words else 0
+
+    # Max silence gap within clip
+    sorted_segs = sorted(relevant, key=lambda s: s["start"])
+    max_silence = max(0, sorted_segs[0]["start"] - clip_start)
+    for i in range(len(sorted_segs) - 1):
+        gap = sorted_segs[i + 1]["start"] - sorted_segs[i]["end"]
+        max_silence = max(max_silence, gap)
+    max_silence = max(max_silence, clip_end - sorted_segs[-1]["end"])
+
+    is_dead_air = speech_ratio < 0.60 or max_silence > 5.0 or filler_ratio > 0.25
+
+    return {
+        "speech_ratio": round(speech_ratio, 3),
+        "filler_ratio": round(filler_ratio, 3),
+        "max_silence": round(max_silence, 1),
+        "is_dead_air": is_dead_air,
+    }
+
+
 def run_pipeline(
     video_path: str,
     brand: str = "6fbarber",
@@ -430,8 +786,14 @@ def run_pipeline(
     notify: bool = False,
     content_type: str = "vlog",
     logo_override: str = None,
+    studio_export: bool = False,
 ):
     """Run the full content pipeline end-to-end."""
+    # Studio export requires compose (needs rendered clips)
+    if studio_export and not compose:
+        print("[pipeline] ⚠️  --studio-export requires --compose (need rendered clips). Enabling --compose.")
+        compose = True
+
     # 'auto' is handled by the clip extractor's intelligent format router.
     # It will analyze face cluster density and pick '9x16' (solo) or 'split' (multi-person).
     # Only normalize truly unknown values as a safety net.
@@ -461,6 +823,8 @@ def run_pipeline(
     tracker = PerformanceTracker(str(output_path / ".analytics"))
 
     total_steps = 9 if compose else 5
+    if studio_export:
+        total_steps += 1
 
     # --- Step 1: Transcribe ---
     print(f"\n📝 Step 1/{total_steps}: Transcription")
@@ -473,6 +837,14 @@ def run_pipeline(
     # --- Step 2: Parse transcript ---
     print(f"\n📋 Step 2/{total_steps}: Parsing transcript")
     formatted_path = parse_transcript(srt_path, output_dir)
+
+    # Generate context hints from transcript (action words that indicate tools/objects)
+    context_hints = _generate_context_hints(srt_path)
+    if context_hints:
+        hints_path = output_path / "context_hints.json"
+        with open(hints_path, "w") as f:
+            json.dump(context_hints, f, indent=2)
+        print(f"[pipeline] Generated {len(context_hints)} context hints for wider crop during tool/object discussion")
 
     # --- Step 3: Clip selection ---
     print(f"\n🎯 Step 3/{total_steps}: AI clip selection")
@@ -493,6 +865,35 @@ def run_pipeline(
         
         with open(formatted_path, "r", encoding="utf-8") as f:
             transcript_text = f.read()
+
+        # ── Video Planner Drop Zone integration ─────────────────────────────
+        plan_topic = os.environ.get("PLAN_TOPIC", "")
+        plan_drop_zones_raw = os.environ.get("PLAN_DROP_ZONES", "")
+        drop_zones = []
+        if plan_drop_zones_raw:
+            try:
+                drop_zones = json.loads(plan_drop_zones_raw)
+                print(f"[pipeline] 📋 Video Plan linked: '{plan_topic}' — {len(drop_zones)} Drop Zones detected")
+                for dz in drop_zones:
+                    print(f"           🟢 {dz.get('label')} @ {dz.get('timestamp')}–{dz.get('endTimestamp')}")
+            except Exception:
+                drop_zones = []
+
+        drop_zone_section = ""
+        if drop_zones:
+            dz_lines = "\n".join(
+                f"  - {dz.get('label', 'DROP ZONE')}: {dz.get('timestamp')} – {dz.get('endTimestamp')}"
+                for dz in drop_zones
+            )
+            drop_zone_section = (
+                f"\n\n🎯 VIDEO PLAN DROP ZONES (HIGHEST PRIORITY):\n"
+                f"This video was recorded using a structured plan for: \"{plan_topic}\"\n"
+                f"The creator intentionally placed high-impact moments at these timestamps:\n"
+                f"{dz_lines}\n"
+                f"MUST include clips from these regions if the content is strong. "
+                f"Give clips starting within 15s of a Drop Zone +8 to +10 bonus points."
+            )
+
 
         prompt = f"""You are a master social media content strategist for the brand '{brand}'.
 Analyze this video transcript and identify highly engaging, viral clip boundaries for 30-60 second shorts.
@@ -521,8 +922,9 @@ Filter criteria:
 - Look for controversial, highly educational, or intensely motivational statements.
 - Each clip must have a "total_score" rating from 0 to 100 on how engaging it is. (Pass QA requires 85+)
 - Each clip MUST be between 30-60 seconds. Score any clip over 60s as 0.
+- Selected clips MUST NOT overlap — enforce at least 15 seconds between the end of one clip and the start of the next.
 - Prioritize clips with natural setup → buildup → payoff structure.
-- Provide verbatim 5-word quotes for both the exact Start and End of each segment.
+- Provide verbatim 5-word quotes for both the exact Start and End of each segment.{drop_zone_section}
 
 CRITICAL: Do NOT output any conversational text, pleasantries, or your internal critique. You must ONLY output pure JSON exactly in this schema:
 {{
@@ -601,9 +1003,12 @@ Transcript (with timestamps):
     # --- Step 4: Validate boundaries ---
     print(f"\n✅ Step 4/{total_steps}: Boundary validation")
 
-    # DYNAMIC SCORING: Extract ALL clips above 85% retention threshold. (User prefers > 85% guarantee over arbitrary limit).
+    # DYNAMIC SCORING: Extract ALL clips above 85% retention threshold.
+    # Note: If a Video Plan was linked, Claude already received the Drop Zone
+    # context in its prompt — no artificial score manipulation needed here.
     qualified_clips = [c for c in clips_raw if c.get("total_score", 0) >= 85]
     qualified_clips.sort(key=lambda x: x.get("total_score", 0), reverse=True)
+
     
     if not qualified_clips and clips_raw: 
         # Fallback if nothing hit 85% to at least grab the best one rather than failing
@@ -613,10 +1018,35 @@ Transcript (with timestamps):
 
     print(f"[pipeline] Filtering complete: Found {len(qualified_clips)} clips exceeding the Viral Retention threshold.")
 
+    # Deduplicate overlapping clips (greedy: highest score wins, min 10s gap)
+    from clip_extractor.selection.timestamp_resolver import deduplicate_clips
+    pre_dedup_count = len(qualified_clips)
+    qualified_clips = deduplicate_clips(qualified_clips, min_gap_sec=10.0)
+    if len(qualified_clips) < pre_dedup_count:
+        print(f"[pipeline] Dedup: removed {pre_dedup_count - len(qualified_clips)} overlapping clip(s), {len(qualified_clips)} remaining")
+
+    # --- Dead air filter ---
+    srt_segments_for_filter = parse_srt(srt_path)
+    pre_filter_count = len(qualified_clips)
+    filtered_clips = []
+    for clip in qualified_clips:
+        da = _compute_dead_air_score(clip.get("start", 0), clip.get("end", 60), srt_segments_for_filter)
+        if da["is_dead_air"]:
+            print(f"  ⚠️  Dead air: clip {clip.get('id')} rejected "
+                  f"(speech={da['speech_ratio']:.0%}, filler={da['filler_ratio']:.0%}, "
+                  f"silence={da['max_silence']}s)")
+        else:
+            filtered_clips.append(clip)
+    if filtered_clips:
+        if len(filtered_clips) < pre_filter_count:
+            print(f"[pipeline] Dead air filter: removed {pre_filter_count - len(filtered_clips)} clip(s), "
+                  f"{len(filtered_clips)} remaining")
+        qualified_clips = filtered_clips
+    elif qualified_clips:
+        print(f"[pipeline] Dead air filter: all clips flagged — keeping best one")
+        qualified_clips = [max(qualified_clips, key=lambda c: c.get("total_score", 0))]
+
     clips_for_validation = []
-    # Claude json might not have 'start' and 'end' seconds since it provides quotes.
-    # The clip_extractor native resolve pipeline usually handles this. If Claude returned seconds, use them.
-    # Wait, the validation requires seconds!
     for c in qualified_clips:
         clips_for_validation.append({
             "id": c["id"], 
@@ -633,6 +1063,29 @@ Transcript (with timestamps):
     )
 
     fixed_clips = validated_to_clip_definitions(validated)
+
+    # Second dedup pass: boundary validation can extend clips, creating new near-overlaps
+    score_lookup = {c.get("id", i): c.get("total_score", 0) for i, c in enumerate(qualified_clips)}
+    dedup_input = [
+        {**fc, "total_score": score_lookup.get(fc["id"], 0)}
+        for fc in fixed_clips
+    ]
+    pre_dedup2 = len(dedup_input)
+    dedup_output = deduplicate_clips(dedup_input, min_gap_sec=10.0)
+    if len(dedup_output) < pre_dedup2:
+        print(f"[pipeline] Post-validation dedup: removed {pre_dedup2 - len(dedup_output)} clip(s) that became too close after boundary adjustment")
+        # Keep only the surviving clips in both lists
+        surviving_ids = {c["id"] for c in dedup_output}
+        fixed_clips = [fc for fc in fixed_clips if fc["id"] in surviving_ids]
+        validated = [v for v in validated if v.id in surviving_ids]
+        qualified_clips = [qc for qc in qualified_clips if qc.get("id") in surviving_ids]
+
+    # --- Hook and ending quality gates ---
+    srt_segments = parse_srt(srt_path)
+    hook_fixes = _apply_hook_quality_gate(fixed_clips, srt_segments, search_window=8.0)
+    ending_fixes = _apply_ending_quality_gate(fixed_clips, srt_segments, search_window=5.0)
+    if hook_fixes or ending_fixes:
+        print(f"[pipeline] Quality gates: {hook_fixes} hook(s) fixed, {ending_fixes} ending(s) fixed")
 
     # Save validated definitions
     validated_path = output_path / "validated_clips.json"
@@ -872,6 +1325,56 @@ Transcript (with timestamps):
                 except Exception as e:
                     print(f"  ⚠️  Thumbnail failed: {e}")
 
+        # --- Step 8.7: Studio export (if --studio-export) ---
+        if studio_export:
+            export_step = 10 if studio_export else 9
+            print(f"\n📤 Step 8.7/{total_steps}: Studio export")
+            try:
+                from pipeline.studio_export import export_to_studio
+                # Gather rendered clip data for export
+                export_clips = []
+                for comp, clip_fixed in zip(
+                    successful_compositions if successful_compositions else [],
+                    fixed_clips,
+                ):
+                    title = comp.get("title", clip_fixed["title"])
+                    clip_out_dir = None
+                    for out in outputs:
+                        if title in out.get("path", ""):
+                            clip_out_dir = str(Path(out["path"]).parent)
+                            break
+                    if not clip_out_dir:
+                        continue
+                    # Get transcript for caption
+                    transcript_text = ""
+                    for s in srt_segments:
+                        if s["start"] >= clip_fixed["start"] and s["end"] <= clip_fixed["end"]:
+                            transcript_text += s["text"].strip() + " "
+                    export_clips.append({
+                        "id": clip_fixed["id"],
+                        "clipId": f"{video_name}-{clip_fixed['id']:02d}",
+                        "title": title,
+                        "transcript": transcript_text.strip(),
+                        "path": str(Path(clip_out_dir) / "rendered_composition.mp4"),
+                    })
+
+                if export_clips:
+                    result = export_to_studio(
+                        output_dir=output_dir,
+                        clips=export_clips,
+                        dry_run=False,  # Studio export runs independently of --no-post
+                    )
+                    print(f"  📤 Studio export: {result.get('uploaded', 0)} uploaded, {result.get('pushed', 0)} pushed")
+                    if result.get("errors"):
+                        for err in result["errors"]:
+                            print(f"  ⚠️  {err}")
+                else:
+                    print("  ⚠️  No rendered compositions available for studio export")
+            except ImportError:
+                print("  ⚠️  studio_export module not found — skipping")
+            except Exception as e:
+                print(f"  ⚠️  Studio export failed: {e}")
+
         # --- Step 9: Discord notification ---
         if notify:
             print(f"\n📣 Step 9/{total_steps}: Discord notification")
@@ -940,6 +1443,8 @@ Examples:
                         help="Content type for pop-out style (default: auto)")
     parser.add_argument("--logo-override", help="Absolute path to custom brand logo")
     parser.add_argument("--no-logo", action="store_true", help="Disable logo usage entirely")
+    parser.add_argument("--studio-export", action="store_true",
+                        help="Export rendered clips to Content Manager studio queue")
 
     args = parser.parse_args()
 
@@ -956,6 +1461,7 @@ Examples:
         notify=args.notify,
         content_type=args.content_type,
         logo_override=None if args.no_logo else args.logo_override,
+        studio_export=args.studio_export,
     )
 
 

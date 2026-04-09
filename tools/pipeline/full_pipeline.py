@@ -787,6 +787,7 @@ def run_pipeline(
     content_type: str = "vlog",
     logo_override: str = None,
     studio_export: bool = False,
+    user_email: str = None,
 ):
     """Run the full content pipeline end-to-end."""
     # Studio export requires compose (needs rendered clips)
@@ -1362,6 +1363,7 @@ Transcript (with timestamps):
                     result = export_to_studio(
                         output_dir=output_dir,
                         clips=export_clips,
+                        user_email=user_email,
                         dry_run=False,  # Studio export runs independently of --no-post
                     )
                     print(f"  📤 Studio export: {result.get('uploaded', 0)} uploaded, {result.get('pushed', 0)} pushed")
@@ -1445,6 +1447,7 @@ Examples:
     parser.add_argument("--no-logo", action="store_true", help="Disable logo usage entirely")
     parser.add_argument("--studio-export", action="store_true",
                         help="Export rendered clips to Content Manager studio queue")
+    parser.add_argument("--user-email", help="User email for Content Manager studio queue")
 
     args = parser.parse_args()
 
@@ -1462,6 +1465,7 @@ Examples:
         content_type=args.content_type,
         logo_override=None if args.no_logo else args.logo_override,
         studio_export=args.studio_export,
+        user_email=args.user_email,
     )
 
 

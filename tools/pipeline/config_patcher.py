@@ -54,22 +54,10 @@ DEFECT_PATCH_MAP = {
         "max": 0.8,
         "description": "Lower face detection confidence threshold",
     },
-    "crop_too_tight": {
-        "param": "split_screen.face_padding_pct",
-        "direction": "increase",
-        "step": 0.05,
-        "min": 0.3,
-        "max": 3.0,
-        "description": "Increase face crop padding for breathing room",
-    },
-    "crop_too_wide": {
-        "param": "split_screen.face_padding_pct",
-        "direction": "decrease",
-        "step": 0.05,
-        "min": 0.3,
-        "max": 3.0,
-        "description": "Decrease face crop padding for tighter framing",
-    },
+    # face_padding_pct locked at 1.105 — optimal value determined by sprint analysis.
+    # Removing crop_too_tight / crop_too_wide from auto-patching to prevent oscillation.
+    # "crop_too_tight": locked
+    # "crop_too_wide": locked
     "multi_speaker_missed": {
         "param": "split_screen.min_face_size_pct",
         "direction": "decrease",

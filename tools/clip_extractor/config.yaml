@@ -3,13 +3,13 @@ crop:
   default_format: 9x16
   face_position:
     x_target: 0.5
-    y_target: 0.529
+    y_target: 0.55
   padding:
     bottom_pct: 0.45
     top_pct: 0.4
 deadzone:
   enabled: true
-  threshold_pct: 0.042
+  threshold_pct: 0.035
   vertical_threshold_pct: 0.08
 detection:
   face:
@@ -81,7 +81,7 @@ split_screen:
     mouth_centering: true
     smoothing_window: 15
     spatial_spread_threshold: 0.15
-  face_padding_pct: 0.66
+  face_padding_pct: 1.105
   merge_distance: 0.2
   merged_padding_pct: 2.5
   min_face_size_pct: 5.0e-05

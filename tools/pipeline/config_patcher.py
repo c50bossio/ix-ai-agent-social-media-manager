@@ -27,7 +27,7 @@ DEFECT_PATCH_MAP = {
         "direction": "increase",
         "step": 0.05,
         "min": 0.05,
-        "max": 0.40,
+        "max": 0.50,  # relaxed from 0.40 — was stuck at ceiling
         "description": "Increase headroom above face",
     },
     "too_much_headroom": {
@@ -35,24 +35,27 @@ DEFECT_PATCH_MAP = {
         "direction": "decrease",
         "step": 0.03,
         "min": 0.05,
-        "max": 0.40,
+        "max": 0.50,
         "description": "Decrease headroom above face",
     },
     "camera_jittery": {
         "param": "smoothing.kalman.process_noise",
         "direction": "decrease",
         "step_factor": 0.5,  # multiply by 0.5 (halve)
-        "min": 0.003,
+        "min": 0.001,  # relaxed from 0.003 — was stuck at floor
         "max": 0.1,
         "description": "Reduce Kalman process noise for smoother tracking",
     },
     "face_tracking_lost": {
-        "param": "detection.face.min_confidence",
+        # Remapped from detection.face.min_confidence (was stuck at 0.45 floor).
+        # Lower measurement_noise → filter trusts face measurements more →
+        # snaps back to face faster when tracking recovers after occlusion.
+        "param": "smoothing.kalman.measurement_noise",
         "direction": "decrease",
-        "step": 0.05,
-        "min": 0.45,
-        "max": 0.8,
-        "description": "Lower face detection confidence threshold",
+        "step_factor": 0.75,
+        "min": 0.02,
+        "max": 0.2,
+        "description": "Lower Kalman measurement noise for more responsive face tracking",
     },
     # face_padding_pct locked at 1.105 — optimal value determined by sprint analysis.
     # Removing crop_too_tight / crop_too_wide from auto-patching to prevent oscillation.

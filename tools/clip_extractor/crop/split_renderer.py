@@ -64,15 +64,16 @@ def _create_blur_fill(
         return np.zeros((target_h, target_w, 3), dtype=np.uint8)
 
     # Scale to cover (fill) — use the larger scale factor
+    import math
     scale = max(target_w / w, target_h / h)
-    fill_w = int(w * scale)
-    fill_h = int(h * scale)
+    fill_w = math.ceil(w * scale)
+    fill_h = math.ceil(h * scale)
 
     filled = cv2.resize(source, (fill_w, fill_h), interpolation=cv2.INTER_LINEAR)
 
     # Center crop to exact target
-    x_off = (fill_w - target_w) // 2
-    y_off = (fill_h - target_h) // 2
+    x_off = max(0, (fill_w - target_w) // 2)
+    y_off = max(0, (fill_h - target_h) // 2)
     cropped = filled[y_off:y_off + target_h, x_off:x_off + target_w]
 
     # Heavy blur
@@ -423,7 +424,10 @@ def _crop_face_region(
         # Scaled image shorter than slot — position anchor at slot center
         y_offset = int(slot_h / 2 - anchor_in_scaled)
         y_offset = max(0, min(y_offset, slot_h - scaled_h))
-        result[y_offset:y_offset + scaled_h, :] = scaled
+        # Clamp copy height to prevent broadcast overflow
+        copy_h = min(scaled_h, slot_h - y_offset)
+        if copy_h > 0:
+            result[y_offset:y_offset + copy_h, :] = scaled[:copy_h, :]
 
     return result
 
@@ -551,6 +555,14 @@ def _compute_adaptive_regions(crop_path: CropPath, merge_dist: float = 0.20) -> 
                 "h": float(np.percentile([d["h"] for d in dets], 90)),
                 "conf": 1.0,
             })
+            
+        # Hard cap to 3 faces to prevent micro-slicing from false positives
+        if len(regions) > 3:
+            regions.sort(key=lambda r: r["w"] * r["h"], reverse=True)
+            regions = regions[:3]
+            # Re-sort left-to-right
+            regions.sort(key=lambda r: r["x"])
+            
         return regions, layout_mode
 
 
@@ -788,13 +800,14 @@ class _SpeakerTracker:
 
     DEADZONE = 0.012  # Ignore face movements smaller than 1.2% of frame
 
-    def __init__(self):
+    def __init__(self, switch_threshold: float = 0.15):
         self.smoothers = [
             {"x": _SimpleKalman(), "y": _SimpleKalman()},
             {"x": _SimpleKalman(), "y": _SimpleKalman()},
         ]
         self.last_positions: list[dict | None] = [None, None]
         self.initialized = False
+        self._switch_threshold = switch_threshold
 
     def update(self, faces: list[dict]) -> list[dict | None]:
         """Assign detected faces to 2 speaker slots, return smoothed positions.
@@ -837,6 +850,17 @@ class _SpeakerTracker:
                     best_dist = dist
                     best_f = f_idx
             if best_f >= 0 and best_dist < 0.3:
+                # Hysteresis guard: only claim this face if we're at least
+                # _switch_threshold closer than the other slot — prevents
+                # rapid slot-swapping between speakers
+                other_slot = 1 - s_idx
+                if self.last_positions[other_slot] is not None:
+                    odx = best[best_f]["x"] - self.last_positions[other_slot]["x"]
+                    ody = best[best_f]["y"] - self.last_positions[other_slot]["y"]
+                    other_dist = (odx * odx + ody * ody) ** 0.5
+                    margin = other_dist - best_dist  # positive = we're closer
+                    if margin < self._switch_threshold:
+                        continue  # not enough advantage — skip
                 assignments[s_idx] = best[best_f]
                 used.add(best_f)
 
@@ -1037,7 +1061,8 @@ def render_dynamic_podcast(
         except ImportError:
             print("  Mouth centering: disabled (MediaPipe not available)")
 
-    tracker = _SpeakerTracker()
+    switch_threshold = config.get("speakers", {}).get("switch_threshold", 0.15)
+    tracker = _SpeakerTracker(switch_threshold=switch_threshold)
     slot_h = OUT_H // 2  # 960px per speaker
     slot_w = OUT_W       # 1080px
     mouth_y_cache: list[float | None] = [None, None]

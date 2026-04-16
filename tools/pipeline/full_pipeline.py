@@ -30,6 +30,7 @@ import os
 import subprocess
 import sys
 import time
+import yaml
 from pathlib import Path
 from datetime import datetime, timezone
 
@@ -624,6 +625,57 @@ def _apply_hook_quality_gate(clips: list, srt_segments: list, search_window: flo
     return fixes
 
 
+def _snap_clips_to_sentences(clips: list, sentence_blocks, min_duration: float = 25.0) -> int:
+    """Snap clip start/end to sentence boundaries derived from word-level SRT.
+
+    For each clip:
+    - If start falls inside a sentence block, snap start to that block's start_sec.
+    - If end falls inside a sentence block, snap end to that block's end_sec.
+
+    Uses TranscriptBlock objects from srt_parser._group_into_sentences(), which
+    splits on .!? punctuation or speech gaps >= 1.5s. More reliable than the
+    subtitle-block quality gates because boundaries are word-precise.
+
+    min_duration: skip adjustment if resulting clip would be shorter than this.
+    Returns count of clips adjusted.
+    """
+    if not clips or not sentence_blocks:
+        return 0
+
+    # Convert TranscriptBlock objects to plain dicts once
+    sentences = [{"start": b.start_sec, "end": b.end_sec} for b in sentence_blocks]
+
+    fixes = 0
+    for clip in clips:
+        orig_start = clip["start"]
+        orig_end = clip["end"]
+        new_start = orig_start
+        new_end = orig_end
+
+        # Snap start: find the sentence containing clip start, move to its beginning
+        for s in sentences:
+            if s["start"] < orig_start < s["end"]:
+                new_start = s["start"]
+                break
+
+        # Snap end: find the sentence containing clip end, move to its conclusion
+        for s in sentences:
+            if s["start"] < orig_end < s["end"]:
+                new_end = s["end"]
+                break
+
+        if (new_start != orig_start or new_end != orig_end) and (new_end - new_start >= min_duration):
+            clip["start"] = new_start
+            clip["end"] = new_end
+            fixes += 1
+            print(
+                f"  📐 Sentence snap: clip {clip['id']} "
+                f"{orig_start:.1f}-{orig_end:.1f}s → {new_start:.1f}-{new_end:.1f}s"
+            )
+
+    return fixes
+
+
 def _apply_ending_quality_gate(clips: list, srt_segments: list, search_window: float = 8.0) -> int:
     """Ensure each clip ends at a complete sentence.
 
@@ -725,6 +777,48 @@ FILLER_WORDS = frozenset({
     "actually", "literally", "honestly", "obviously",
 })
 
+_HOOK_BLOCKLIST = frozenset({
+    "and", "but", "so", "because", "well", "like", "honestly",
+    "also", "then", "anyway", "actually", "um", "uh",
+})
+_HOOK_BLOCKLIST_PHRASES = frozenset({
+    "you know", "i mean", "i think", "just started",
+})
+
+
+def _filter_filler_hook_clips(
+    clips: list, srt_segments: list, min_remaining: int = 1
+) -> int:
+    """Remove clips whose hooks still start with filler/conjunction words
+    after _apply_hook_quality_gate() has already tried (and failed) to fix them.
+    Only removes if at least min_remaining clips would be left.
+    Returns count removed.
+    """
+    removed = 0
+    i = 0
+    while i < len(clips):
+        clip = clips[i]
+        seg = next(
+            (s for s in srt_segments if s["start"] <= clip["start"] < s["end"]),
+            None,
+        )
+        if seg is None:
+            i += 1
+            continue
+
+        words = seg["text"].strip().split()
+        first_word = words[0].lower().rstrip(",.!?") if words else ""
+        first_two = " ".join(words[:2]).lower().rstrip(",.!?")
+
+        if first_word in _HOOK_BLOCKLIST or first_two in _HOOK_BLOCKLIST_PHRASES:
+            if len(clips) - removed > min_remaining:
+                print(f"  ❌ [hook-filter] Removed clip {clip['id']}: hook starts with '{first_two}'")
+                clips.pop(i)
+                removed += 1
+                continue
+        i += 1
+    return removed
+
 
 def _compute_dead_air_score(clip_start: float, clip_end: float, srt_segments: list) -> dict:
     """Analyze a clip's SRT segments for dead air, filler density, and silence.
@@ -807,6 +901,11 @@ def run_pipeline(
 
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
+
+    # Load clip extractor config for tunable thresholds
+    _config_path = Path(__file__).parent.parent / "clip_extractor" / "config.yaml"
+    with open(_config_path, "r") as _f:
+        config = yaml.safe_load(_f)
 
     print("=" * 60)
     print("IX Content Pipeline")
@@ -1007,13 +1106,14 @@ Transcript (with timestamps):
     # DYNAMIC SCORING: Extract ALL clips above 85% retention threshold.
     # Note: If a Video Plan was linked, Claude already received the Drop Zone
     # context in its prompt — no artificial score manipulation needed here.
-    qualified_clips = [c for c in clips_raw if c.get("total_score", 0) >= 85]
+    _min_score = config.get("selection", {}).get("scoring", {}).get("min_total_score", 85)
+    qualified_clips = [c for c in clips_raw if c.get("total_score", 0) >= _min_score]
     qualified_clips.sort(key=lambda x: x.get("total_score", 0), reverse=True)
 
     
     if not qualified_clips and clips_raw: 
         # Fallback if nothing hit 85% to at least grab the best one rather than failing
-        print("[pipeline] ⚠️  No clips hit the 85+ score threshold. Falling back to the best available clip.")
+        print(f"[pipeline] ⚠️  No clips hit the {_min_score}+ score threshold. Falling back to the best available clip.")
         best_clip = max(clips_raw, key=lambda x: x.get("total_score", 0))
         qualified_clips = [best_clip]
 
@@ -1083,10 +1183,22 @@ Transcript (with timestamps):
 
     # --- Hook and ending quality gates ---
     srt_segments = parse_srt(srt_path)
-    hook_fixes = _apply_hook_quality_gate(fixed_clips, srt_segments, search_window=8.0)
-    ending_fixes = _apply_ending_quality_gate(fixed_clips, srt_segments, search_window=5.0)
+    hook_win = config.get("selection", {}).get("hook_search_window_sec", 8.0)
+    ending_win = config.get("selection", {}).get("ending_search_window_sec", 5.0)
+    hook_fixes = _apply_hook_quality_gate(fixed_clips, srt_segments, search_window=hook_win)
+    ending_fixes = _apply_ending_quality_gate(fixed_clips, srt_segments, search_window=ending_win)
     if hook_fixes or ending_fixes:
         print(f"[pipeline] Quality gates: {hook_fixes} hook(s) fixed, {ending_fixes} ending(s) fixed")
+
+    # Reject clips with unfixable filler hooks
+    rejected = _filter_filler_hook_clips(fixed_clips, srt_segments)
+    if rejected:
+        print(f"[pipeline] Hook filter: removed {rejected} clip(s) with filler hooks")
+
+    # --- Sentence boundary snapping (supplemental pass) ---
+    snap_fixes = _snap_clips_to_sentences(fixed_clips, ts_transcript.blocks)
+    if snap_fixes:
+        print(f"[pipeline] Sentence snapping: {snap_fixes} clip(s) snapped to sentence boundaries")
 
     # Save validated definitions
     validated_path = output_path / "validated_clips.json"
